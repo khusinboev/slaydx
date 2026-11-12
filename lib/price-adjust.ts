@@ -38,6 +38,11 @@ export function isPriceAdjust(v: unknown): v is PriceAdjust {
  * hand-edited payload; on the money path the safe answer is the base price.
  */
 export function applyPriceAdjust(base: number, adj?: PriceAdjust | null): number {
+  /*
+   * A FREE tool stays free (`basePrice: 0`, «Titul»): the rounding floor below (`max(roundTo, …)`) would turn any
+   * percentage of 0 into 100–1 000 so'm, i.e. an admin's routine price change would start charging for a free tool.
+   */
+  if (base <= 0) return base;
   if (!adj || adj.percent === 100 || !isPriceAdjust(adj)) return base;
   return Math.max(adj.roundTo, Math.round((base * adj.percent) / 100 / adj.roundTo) * adj.roundTo);
 }

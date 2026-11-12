@@ -144,7 +144,7 @@ function runsPara(runs: TitulRun[], o: ParaOpts): TitulPara | null {
 }
 
 const caps = (s: string) => s.toUpperCase();
-const keep = <T>(xs: Array<T | null | false | undefined>): T[] => xs.filter((x): x is T => Boolean(x));
+const keep = <T>(xs: Array<T | null | false | undefined | "">): T[] => xs.filter((x): x is T => Boolean(x));
 
 /** The blank a hand signature / name goes on when the name is not given. */
 export const NAME_BLANK = "____________________";

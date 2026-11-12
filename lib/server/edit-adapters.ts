@@ -6,6 +6,7 @@ import { applyArticleOps, parseArticleOps, type ArticleOp } from "../generation/
 import { applyWorkOps, parseWorkOps, type WorkOp } from "../generation/work/edit";
 import { applyTeacherOps, parseTeacherOps, type TeacherOp } from "../generation/teacher/edit";
 import { TEACHER_TOOL_LIST } from "../generation/teacher/types";
+import { applyTitulOps, parseTitulOps, type TitulOp } from "../generation/title-page/edit";
 import { renderDocx } from "../generation/render-docx";
 import { renderPptx } from "../generation/render-pptx";
 import { renderPptxWithTemplate } from "../generation/render-pptx-template";
@@ -60,7 +61,7 @@ export type ParseResult = { ok: true; ops: unknown[] } | { ok: false; error: str
 export type ApplyResult = { ok: true; doc: AcademicDoc } | { ok: false; error: string; at: number };
 
 export type EditAdapter = {
-  id: "slide" | "resume" | "article" | "work" | "essay" | "teacher";
+  id: "slide" | "resume" | "article" | "work" | "essay" | "teacher" | "titul";
   /** Shu adapter xizmat qiladigan vositalar (`generations.tool_id`). */
   tools: ReadonlySet<string>;
   /** Hujjatda tahrir uchun kerakli model bormi (yo'q bo'lsa 409 `legacy`). */
@@ -379,6 +380,23 @@ export const teacherAdapter: EditAdapter = {
   },
 };
 
+/**
+ * «Titul» (free title page): the op is `{ op: "text", id, value }` on a run of `planTitlePage`; the file is rebuilt
+ * by `renderDocx`, which draws `doc.titul` from the same plan as the viewer.
+ */
+export const titulAdapter: EditAdapter = {
+  id: "titul",
+  tools: new Set(["title-page"]),
+  hasModel: (doc) => Boolean(doc?.titul),
+  prepare: (doc) => doc,
+  parse: (raw) => parseTitulOps(raw),
+  apply: (doc, ops) => applyTitulOps(doc, ops as TitulOp[]),
+  async render(ctx) {
+    const bytes = await renderDocx(ctx.doc);
+    return { bytes, mime: DOCX_MIME, fileName: ctx.fileName };
+  },
+};
+
 /** Bitta so'rovdagi operatsiyalar soni — barcha op tillari uchun bir xil. */
 export const MAX_EDIT_OPS = 50;
 
@@ -400,7 +418,7 @@ export function preParseOps(raw: unknown): { ok: true } | { ok: false; error: st
   return { ok: true };
 }
 
-const ADAPTERS: EditAdapter[] = [slideAdapter, resumeAdapter, articleAdapter, workAdapter, essayAdapter, teacherAdapter];
+const ADAPTERS: EditAdapter[] = [slideAdapter, resumeAdapter, articleAdapter, workAdapter, essayAdapter, teacherAdapter, titulAdapter];
 
 /** Vosita uchun adapter; tahrirlanmaydigan vositada `null`. */
 export function adapterFor(toolId: string): EditAdapter | null {
