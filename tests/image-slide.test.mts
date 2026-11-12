@@ -202,7 +202,8 @@ function deckJson(n: number) {
 }
 
 /** Stub: the writer, the image endpoint and the proofreader, by URL and body. `draw(i, call#)` decides each draw. */
-function stub(n: number, draw: (slideTitle: string, nth: number) => number, issuesFor: (n: number) => unknown[] = () => []) {
+/** `issuesFor(n, items)`: the proofreader's answer to its n-th call; `items` is the text list of THAT slide (slides 2…N are drawn in parallel lanes, so the call order is not the slide order). */
+function stub(n: number, draw: (slideTitle: string, nth: number) => number, issuesFor: (n: number, items: string) => unknown[] = () => []) {
   const saved = { key: process.env.GEMINI_API_KEY, fetch: globalThis.fetch };
   process.env.GEMINI_API_KEY = "test-gemini-key";
   const calls: Call[] = [];
@@ -227,7 +228,7 @@ function stub(n: number, draw: (slideTitle: string, nth: number) => number, issu
     if (sys.includes("proofread")) {
       checks += 1;
       calls.push({ kind: "check", at: Date.now(), body });
-      return json(200, { candidates: [{ content: { parts: [{ text: JSON.stringify({ issues: issuesFor(checks) }) }] } }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 } });
+      return json(200, { candidates: [{ content: { parts: [{ text: JSON.stringify({ issues: issuesFor(checks, JSON.stringify(body.contents ?? "")) }) }] } }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 } });
     }
     calls.push({ kind: "write", at: Date.now(), body });
     return json(200, { candidates: [{ content: { parts: [{ text: deckJson(n) }] }, finishReason: "STOP" }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 10 } });
@@ -290,7 +291,13 @@ test("no picture at all throws (full refund); a blocked key stops the remaining 
 });
 
 test("a slide whose text came out wrong is redrawn once with the exact spelling", async () => {
-  const s = stub(4, () => 200, (n) => (n === 2 ? [{ expected: "band 2", seen: "bnad 2" }] : []));
+  // Keyed by the slide's own text, not by the call number: under load the lanes finish in any order (CI flake 2026-11-12).
+  let flaggedOnce = false;
+  const s = stub(4, () => 200, (_n, items) => {
+    if (flaggedOnce || !items.includes("band 2")) return [];
+    flaggedOnce = true;
+    return [{ expected: "band 2", seen: "bnad 2" }];
+  });
   try {
     const v = { ...values, slideCount: 4 };
     await buildImageSlideDoc(extractMeta(tool, v), v, Date.now() + 600_000);
