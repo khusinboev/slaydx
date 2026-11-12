@@ -149,7 +149,8 @@ test("Hamyon: hero shows the spendable total (points + balance) and the bonus sh
   await waitFor(() => assert.ok(document.querySelector('[data-referral-card="ready"]')));
 });
 
-test("Hamyon: «To'ldirish» opens the existing PayDialog (presets + Click/Payme)", async () => {
+test("Hamyon: «To'ldirish» opens the top-up sheet at the method chooser (no amount yet)", async () => {
+  // MUTATION: the hero opening `openPay({ method: "app" })` → the sheet skips the chooser.
   signIn();
   stub();
   mount();
@@ -159,8 +160,116 @@ test("Hamyon: «To'ldirish» opens the existing PayDialog (presets + Click/Payme
   });
   assert.equal(useUi.getState().overlay, "pay");
   const dialog = screen.getByRole("dialog");
-  assert.match(dialog.textContent ?? "", /To.lov usuli/);
-  assert.ok(screen.getByRole("button", { name: `${groupDigits(50_000)} so'm` })); // redesign W5: was «50k»
+  assert.match(dialog.textContent ?? "", /To.lov usulini tanlang/);
+  assert.ok(dialog.querySelector('[data-pay-step="choose"]'));
+  assert.deepEqual([...dialog.querySelectorAll("[data-pay-methods] [data-pay-method]")].map((b) => b.getAttribute("data-pay-method")), ["click", "payme"]);
+  assert.ok(!dialog.querySelector("[data-pay-amount-input]"), "the amount comes after the method");
+});
+
+/* ───────────────────────────── «To'ldirish usullari» (owner 2026-11-12) ───────────────────────────── */
+
+const walletMethods = () => [...document.querySelectorAll("[data-wallet-methods] [data-wallet-method]")].map((b) => b.getAttribute("data-wallet-method"));
+
+test("Hamyon methods: no preset amounts on the page — one row per enabled method, in the wallet order", async () => {
+  // MUTATION: `paynet` row without its flag / Payme before Paynet → red.
+  for (const [payments, want] of [
+    [{ click: true, payme: true, clickDirect: true, paynet: true }, ["app", "card", "phone", "paynet", "payme"]],
+    [{ click: true, payme: false, clickDirect: true }, ["app", "card", "phone"]],
+    [{ click: true, payme: true }, ["click", "payme"]],
+    [{ click: false, payme: false, paynet: true }, ["paynet"]],
+  ] as const) {
+    signIn();
+    useAppStore.setState({ features: { payments } as never });
+    stub();
+    mount();
+    assert.deepEqual(walletMethods(), [...want], JSON.stringify(payments));
+    const section = document.querySelector("[data-wallet-methods]")!;
+    assert.equal(section.querySelector("h2")!.textContent, "To'ldirish usullari");
+    assert.ok(!document.querySelector("[data-wallet-pack], [data-wallet-packs], [data-pay-amount]"), "no amount cards");
+    assert.ok(!/\b(10|25|50|100) 000\b/.test(section.textContent ?? ""), "no amount text in the methods section");
+    for (const b of section.querySelectorAll("[data-wallet-method]")) {
+      assert.match(b.className, /min-h-\[68px\]/, "≥ 44 px rows");
+      assert.ok(b.querySelector("svg"), "badge / chevron");
+    }
+    cleanup();
+  }
+  signIn();
+  useAppStore.setState({ features: { payments: { click: false, payme: false } } as never });
+  stub();
+  mount();
+  assert.deepEqual(walletMethods(), []);
+  assert.ok(document.querySelector("[data-wallet-methods-none]"), "nothing to pick: says so");
+});
+
+test("Hamyon methods: names and hints of each row", async () => {
+  signIn();
+  useAppStore.setState({ features: { payments: { click: true, payme: true, clickDirect: true, paynet: true } } as never });
+  stub();
+  mount();
+  const text = (id: string) => document.querySelector(`[data-wallet-method="${id}"]`)!.textContent;
+  assert.equal(text("app"), "Click ilovasiClick ilovasida bir bosishda");
+  assert.equal(text("card"), "Bank kartasiUzcard / Humo, SMS kod bilan");
+  assert.equal(text("phone"), "Telefon raqamClick hisob-fakturasi telefoningizga keladi");
+  assert.equal(text("paynet"), "PaynetPaynet ilovasi yoki terminali orqali");
+  assert.equal(text("payme"), "PaymePayme sahifasiga o'tasiz");
+});
+
+for (const m of ["app", "card", "phone", "paynet", "payme"] as const) {
+  test(`Hamyon method «${m}»: opens the sheet at its «Summa» step with an EMPTY amount`, async () => {
+    // MUTATION: `openPay` keeping the last amount / the wallet row passing an amount → the input is filled.
+    signIn();
+    useAppStore.setState({ features: { payments: { click: true, payme: true, clickDirect: true, paynet: true } } as never });
+    usePayAmount.setState({ amount: 50_000 });
+    const calls = stub();
+    mount();
+    await act(async () => {
+      fireEvent.click(document.querySelector(`[data-wallet-method="${m}"]`)!);
+    });
+    assert.equal(useUi.getState().overlay, "pay");
+    const dialog = screen.getByRole("dialog");
+    assert.ok(dialog.querySelector('[data-pay-step="amount"]'));
+    assert.equal(dialog.querySelector("[data-pay-chosen]")!.getAttribute("data-pay-chosen"), m);
+    assert.equal((dialog.querySelector("[data-pay-amount-input]") as HTMLInputElement).value, "");
+    assert.ok((dialog.querySelector("[data-pay-continue]") as HTMLButtonElement).disabled);
+    assert.ok(!calls.some((c) => c.startsWith("POST ")), "nothing is created by choosing");
+  });
+}
+
+test("Hamyon methods signed out: a row opens the login returning to /uz/wallet (the sheet does not open)", async () => {
+  useAppStore.setState({ sessionChecked: true, loggedIn: false, user: null, features: { payments: { click: true, payme: true } } as never });
+  stub();
+  mount();
+  fireEvent.click(document.querySelector('[data-wallet-method="click"]')!);
+  assert.equal(useUi.getState().overlay, "login");
+  assert.equal(useUi.getState().returnTo, "/uz/wallet");
+});
+
+test("Hamyon methods: the payment bonus percent from /me reaches the sheet's preview", async () => {
+  // MUTATION: `usePayAmount.setBonusPercent` not called from the wallet → no preview in the sheet.
+  signIn();
+  useAppStore.setState({ features: { payments: { click: true, payme: true, clickDirect: true } } as never });
+  stub({ me: meWith(10) });
+  mount();
+  await waitFor(() => assert.equal(hintText(), "Har bir to‘ldirishga +10% bonus"));
+  await act(async () => {
+    fireEvent.click(document.querySelector('[data-wallet-method="card"]')!);
+  });
+  await act(async () => {
+    fireEvent.change(document.querySelector("[data-pay-amount-input]")!, { target: { value: "25000" } });
+  });
+  assert.equal(document.querySelector("[data-pay-bonus-preview]")!.textContent, `+${groupDigits(2_500)} so'm bonus · Balansga jami: ${groupDigits(27_500)} so'm`);
+});
+
+test("Hamyon features: the payment line names only the enabled providers", () => {
+  // MUTATION: the old fixed «Click yoki Payme» line → red for every case but the second.
+  const line = (p: Parameters<typeof topupFeatures>[0]) => topupFeatures(p).find((f) => f.includes("xavfsiz")) ?? null;
+  assert.equal(line({ click: true, paynet: true, payme: true }), "Click, Paynet yoki Payme orqali xavfsiz to'lov");
+  assert.equal(line({ click: true, payme: true }), "Click yoki Payme orqali xavfsiz to'lov");
+  assert.equal(line({ click: true, paynet: true, payme: false }), "Click yoki Paynet orqali xavfsiz to'lov");
+  assert.equal(line({ paynet: true }), "Paynet orqali xavfsiz to'lov");
+  assert.equal(line({ click: false, payme: false }), null, "no provider: no promise");
+  assert.equal(line(null), null);
+  assert.equal(topupFeatures({ click: true }).length, 4);
 });
 
 test("Hamyon: «Harakatlar» — readable label per kind, signed amounts, bonus so'm vs so'm, income marked", async () => {
@@ -247,7 +356,9 @@ test("Hamyon: «Har bir to‘ldirishga +N% bonus» on the top-up area with the p
     stub({ me: meWith(p) });
     mount();
     await waitFor(() => assert.equal(hintText(), text));
-    assert.ok(document.querySelector("[data-wallet-payment-bonus]")!.closest("[data-wallet-packs]"), "inside «Tez to'ldirish»");
+    assert.ok(document.querySelector("[data-wallet-payment-bonus]")!.closest("[data-wallet-methods]"), "inside «To'ldirish usullari»");
+    const hint = document.querySelector("[data-wallet-payment-bonus]")!;
+    assert.ok(hint.compareDocumentPosition(document.querySelector("[data-wallet-methods] ul")!) & Node.DOCUMENT_POSITION_FOLLOWING, "above the method rows");
     cleanup();
   }
   assert.ok(!document.querySelector("[data-wallet-first-bonus]"), "the first top-up hint is gone");
@@ -266,7 +377,7 @@ test("Hamyon: payment bonus hint hidden at 0 %, for a missing / invalid value, o
   useAppStore.setState({ sessionChecked: true, loggedIn: false, user: null });
   stub({ me: meWith(10) });
   mount();
-  assert.ok(document.querySelector("[data-wallet-packs]"));
+  assert.ok(document.querySelector("[data-wallet-methods]"));
   assert.ok(!document.querySelector("[data-wallet-payment-bonus]"), "signed out: no hint");
 });
 
@@ -322,25 +433,15 @@ test("Hamyon ?order=: cancelled → «bekor qilindi»", async (t) => {
   assert.equal(refreshes, 0);
 });
 
-/* ───────────────────────────── Paynet in the top-up dialog (docs/payments/PAYNET.md «UI») ───────────────────────────── */
+/* ───────────────────────────── Paynet in the top-up sheet (docs/payments/PAYNET.md «UI») ───────────────────────────── */
 
 /**
- * Owner 2026-10-31: the user picks the amount, then Click OR Paynet in the same dialog; the separate wallet card is gone.
- *
- * Mutations (each turned the named test red, then restored):
- *   `paynetOn` gate dropped in PayDialog → "offered only while the server has Paynet configured";
- *   `amountErr` dropped from the Paynet tile → "the tile is disabled while the amount is invalid" (owner 2026-11-01: the amount goes into the link);
- *   c/a / new-tab / prefill switch → "with PAYNET_APP_PREFILL …" and "prefill switched off …"; col-span → "a lone Click or Paynet tile";
- *   `needLogin()` dropped from `openPaynet` → "signed out → login";
- *   PaynetStep shows a constant id / the dialog amount again / «X so'm to'lang» step → "shows «Sizning ID raqamingiz» ...";
- *   the «Sizning ID raqamingiz» label / the wrong-ID warning removed → "shows «Sizning ID raqamingiz», the wrong-ID warning ...";
- *   the limits not read from `lib/topup-limits` (hard-coded) → "shows «Sizning ID raqamingiz» ..." (limits line);
- *   an order created on the Paynet tap → "no order is created";
- *   the copy handler copies something else than the ID → "copy button";
- *   `rel` without noreferrer / link drawn without paynetUrl → "safe external link";
- *   the old wallet card re-added → "no separate Paynet card on the wallet page".
+ * Owner 2026-11-12: Paynet is one of the «To'ldirish usullari»; the sheet asks the amount first, then the Paynet step
+ * shows the user's own SlaydX ID first and biggest (the payer types it into Paynet), the amount, a short wrong-ID
+ * warning and «Paynet ilovasini ochish» — the app opens ONLY on that tap (no longer when the method is chosen).
+ * Mutations: see the `MUTATION:` notes next to the assertions.
  */
-// jsdom has no window.open: the Paynet tile opens the app in a new tab; record it.
+// jsdom has no window.open: the Paynet button opens the app in a new tab; record it.
 let opened: Array<[string, string | undefined, string | undefined]> = [];
 (window as unknown as { open: unknown }).open = (u: string, target?: string, features?: string) => {
   opened.push([u, target, features]);
@@ -351,257 +452,257 @@ const paynetNotice = () => document.querySelector("[data-paynet-notice]")!;
 const docExec = document as unknown as { execCommand?: (c: string) => boolean };
 const navAny = navigator as unknown as Record<string, unknown>;
 const realExec = docExec.execCommand;
+const tg = window as unknown as Record<string, unknown>;
 function signInWithPaynet(paynet: boolean | undefined, extra: Record<string, unknown> = {}) {
   signIn();
   useAppStore.setState({ features: { payments: { click: true, payme: true, ...(paynet === undefined ? {} : { paynet }), ...extra } } as never });
 }
-async function openDialog() {
+const paynetRow = () => document.querySelector('[data-wallet-methods] [data-wallet-method="paynet"]') as HTMLButtonElement | null;
+const continueBtn = () => document.querySelector("[data-pay-continue]") as HTMLButtonElement;
+/** The wallet's Paynet row → «Summa» (typed `amount`) → «Davom etish». */
+async function toPaynet(amount = "37000") {
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "To'ldirish" }));
+    fireEvent.click(paynetRow()!);
   });
-  return screen.getByRole("dialog");
+  await act(async () => {
+    fireEvent.change(document.querySelector("[data-pay-amount-input]")!, { target: { value: amount } });
+  });
+  await act(async () => {
+    fireEvent.click(continueBtn());
+  });
 }
-const paynetRow = (dialog: HTMLElement) => dialog.querySelector('[data-pay-methods] [data-pay-method="paynet"]') as HTMLButtonElement | null;
 afterEach(() => {
   delete navAny.clipboard;
   docExec.execCommand = realExec;
+  delete tg.Telegram;
+  delete tg.TelegramWebviewProxy;
 });
 
-test("Hamyon Paynet: no separate Paynet card on the wallet page", async () => {
-  signInWithPaynet(true, { paynetUrl: "https://app.paynet.test/?m=54883" });
-  stub();
-  mount();
-  await waitFor(() => assert.ok(document.querySelector('[data-wallet-ledger="ready"]')));
-  assert.ok(!document.querySelector("[data-wallet-paynet]"));
-  assert.ok(!/Paynet/.test(document.querySelector("[data-wallet]")!.textContent ?? ""), "no Paynet text on the page itself");
-});
-
-test("Hamyon Paynet: offered in the dialog only while the server has Paynet configured", async () => {
+test("Hamyon Paynet: a method row and a chooser row only while the server has Paynet configured; no separate Paynet card", async () => {
+  // MUTATION: the `payments.paynet === true` check dropped in `enabledPayMethods` → a Paynet row without Paynet.
   for (const paynet of [undefined, false]) {
     signInWithPaynet(paynet);
     stub();
     mount();
-    const dialog = await openDialog();
-    assert.ok(!paynetRow(dialog), `no Paynet row for paynet=${String(paynet)}`);
-    assert.ok(!/Paynet/.test(dialog.textContent ?? ""), "no Paynet text in the dialog");
+    assert.ok(!paynetRow(), `no Paynet row for paynet=${String(paynet)}`);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "To'ldirish" }));
+    });
+    const dialog = screen.getByRole("dialog");
+    assert.ok(!dialog.querySelector('[data-pay-method="paynet"]'));
+    assert.ok(!/Paynet/.test(dialog.textContent ?? ""), "no Paynet text in the sheet");
     cleanup();
+    useUi.setState({ overlay: null });
   }
-  for (const [direct, want] of [
-    [false, ["click", "paynet", "payme"]],
-    [true, ["app", "paynet", "phone", "card", "payme"]],
-  ] as const) {
-    signInWithPaynet(true, { clickDirect: direct });
-    stub();
-    mount();
-    const dialog = await openDialog();
-    const methods = [...dialog.querySelectorAll("[data-pay-methods] [data-pay-method]")].map((b) => b.getAttribute("data-pay-method"));
-    assert.deepEqual(methods, [...want], `clickDirect=${direct}`);
-    // Owner 2026-11-01: Click and Paynet side by side in the top row, each with its logo.
-    const apps = dialog.querySelector("[data-pay-apps]")!;
-    assert.ok(apps.className.includes("grid-cols-2"));
-    assert.deepEqual([...apps.querySelectorAll("[data-pay-method]")].map((b) => b.getAttribute("data-pay-method")), [want[0], "paynet"]);
-    assert.equal(paynetRow(dialog)!.getAttribute("aria-label"), "Paynet");
-    assert.ok(paynetRow(dialog)!.querySelector("svg"), "the Paynet mark");
-    cleanup();
-  }
-  // Paynet alone: no «provider not connected» warning, the row is there.
-  signIn();
-  useAppStore.setState({ features: { payments: { click: false, payme: false, paynet: true } } as never });
+  signInWithPaynet(true, { paynetUrl: "https://app.paynet.test/?m=54883" });
   stub();
   mount();
-  const dialog = await openDialog();
-  assert.ok(paynetRow(dialog));
-  assert.ok(!/hali ulanmagan/.test(dialog.textContent ?? ""));
+  await waitFor(() => assert.ok(document.querySelector('[data-wallet-ledger="ready"]')));
+  assert.ok(paynetRow());
+  assert.ok(paynetRow()!.querySelector("svg"), "the Paynet mark");
+  assert.ok(!document.querySelector("[data-wallet-paynet]"), "the old standalone card is gone");
+  assert.ok(!document.querySelector("[data-paynet-id]"), "the ID is shown in the sheet, not on the page");
 });
 
-test("Hamyon Paynet: the tile is disabled while the amount is invalid (the amount goes into the app link)", async () => {
-  // MUTATION: `amountErr` dropped from the Paynet tile → enabled at an invalid amount.
-  signInWithPaynet(true);
-  stub();
+test("Hamyon Paynet: the amount comes first — «Davom etish» disabled while it is invalid; choosing opens nothing", async () => {
+  opened = [];
+  signInWithPaynet(true, { paynetUrl: "https://app.paynet.test/?m=54883", paynetPrefill: true });
+  const calls = stub();
   mount();
-  const dialog = await openDialog();
-  const input = dialog.querySelector("input") as HTMLInputElement;
+  await act(async () => {
+    fireEvent.click(paynetRow()!);
+  });
+  assert.ok(document.querySelector('[data-pay-step="amount"]'));
+  assert.equal(opened.length, 0, "choosing Paynet opens nothing");
+  const input = document.querySelector("[data-pay-amount-input]") as HTMLInputElement;
   for (const value of ["5", "", "99999999"]) {
     await act(async () => {
       fireEvent.change(input, { target: { value } });
     });
-    assert.equal(paynetRow(screen.getByRole("dialog"))!.disabled, true, `disabled for ${JSON.stringify(value)}`);
+    assert.equal(continueBtn().disabled, true, `disabled for ${JSON.stringify(value)}`);
   }
   await act(async () => {
     fireEvent.change(input, { target: { value: "30000" } });
   });
-  assert.equal(paynetRow(screen.getByRole("dialog"))!.disabled, false);
+  assert.equal(continueBtn().disabled, false);
+  assert.ok(!paynetStep());
+  assert.ok(!calls.some((c) => c.startsWith("POST ")));
 });
 
-test("Hamyon Paynet: with PAYNET_APP_PREFILL the tile opens the app in a NEW tab with the ID and the amount (tiyin), the step stays", async () => {
-  // MUTATIONS: `a` in so'm / `c` dropped / same-tab navigation / prefill ignoring the switch → this test is red.
+test("Hamyon Paynet: with PAYNET_APP_PREFILL nothing opens until «Paynet ilovasini ochish»; then a NEW tab with the ID and the TYPED amount (tiyin)", async () => {
+  // MUTATIONS: the app opened on «Davom etish» (the old `openPaynet`) / `a` in so'm / `c` dropped / same-tab
+  // navigation / prefill ignoring the switch → this test is red.
   opened = [];
   signInWithPaynet(true, { paynetUrl: "https://app.paynet.test/?m=54883", paynetPrefill: true });
   stub();
   mount();
-  const dialog = await openDialog();
+  await toPaynet("37000");
+  assert.ok(paynetStep(), "the Paynet step");
+  assert.deepEqual(opened, [], "not opened by «Davom etish»");
+  assert.ok(!document.querySelector("[data-paynet-launched]"));
+  const open = document.querySelector("[data-paynet-open]") as HTMLButtonElement;
+  assert.equal(open.textContent, "Paynet ilovasini ochish");
   await act(async () => {
-    fireEvent.change(dialog.querySelector("input") as HTMLInputElement, { target: { value: "37000" } });
-  });
-  await act(async () => {
-    fireEvent.click(paynetRow(dialog)!);
+    fireEvent.click(open);
   });
   assert.deepEqual(opened, [["https://app.paynet.test/?m=54883&c=u1&a=3700000", "_blank", "noopener,noreferrer"]]);
+  assert.equal(opened[0]![0], paynetPayLink("https://app.paynet.test/?m=54883", "u1", 37_000), "exactly the shared link builder");
   assert.ok(paynetStep(), "the step stays as the fallback (this tab was not replaced)");
   assert.match(document.querySelector("[data-paynet-launched]")!.textContent ?? "", /ID va summa tayyor/);
-  assert.equal((document.querySelector("[data-paynet-open]") as HTMLAnchorElement).getAttribute("href"), "https://app.paynet.test/?m=54883&c=u1&a=3700000");
-  // Reopening the dialog forgets the launch.
+  // Reopening the sheet forgets the launch.
   await act(async () => {
     useUi.getState().close();
   });
   await act(async () => {
     useUi.getState().open("pay");
   });
-  assert.ok(!paynetStep() && !document.querySelector("[data-paynet-launched]"), "back to the method list on reopen");
+  assert.ok(!paynetStep() && !document.querySelector("[data-paynet-launched]"), "back to the chooser on reopen");
 });
 
-test("Hamyon Paynet: prefill switched off → the bare merchant link opens, the note asks to type the ID; no link → nothing opens", async () => {
+test("Hamyon Paynet: prefill switched off → the bare merchant link on the tap, the note asks to type the ID; no link → no button", async () => {
   // MUTATION: prefill applied without `paynetPrefill` → the unverified c/a params reach the app.
   opened = [];
   signInWithPaynet(true, { paynetUrl: "https://app.paynet.test/?m=54883" });
   stub();
   mount();
-  const dialog = await openDialog();
+  await toPaynet("25000");
+  assert.deepEqual(opened, []);
   await act(async () => {
-    fireEvent.click(paynetRow(dialog)!);
+    fireEvent.click(document.querySelector("[data-paynet-open]")!);
   });
   assert.deepEqual(opened, [["https://app.paynet.test/?m=54883", "_blank", "noopener,noreferrer"]]);
   assert.match(document.querySelector("[data-paynet-launched]")!.textContent ?? "", /ID ni kiriting/);
   assert.ok(!/summa tayyor/.test(document.querySelector("[data-paynet-launched]")!.textContent ?? ""));
   cleanup();
+  useUi.setState({ overlay: null });
   opened = [];
   signInWithPaynet(true, { paynetUrl: null, paynetPrefill: true });
   stub();
   mount();
-  const d2 = await openDialog();
-  await act(async () => {
-    fireEvent.click(paynetRow(d2)!);
-  });
+  await toPaynet("25000");
+  assert.ok(paynetStep(), "the step still works (manual payment)");
+  assert.ok(!document.querySelector("[data-paynet-open]"), "no button without paynetUrl");
   assert.deepEqual(opened, []);
-  assert.ok(paynetStep());
-  assert.ok(!document.querySelector("[data-paynet-launched]"));
 });
 
-test("Hamyon Paynet: a lone Click or Paynet tile spans the whole row", async () => {
-  // MUTATION: the col-span-2 condition dropped → the lone tile is half width.
-  signIn();
-  useAppStore.setState({ features: { payments: { click: false, payme: false, paynet: true } } as never });
+test("Telegram: «Paynet ilovasini ochish» opens the link EXTERNALLY (WebApp.openLink), not window.open", async () => {
+  const tgOpens: string[] = [];
+  tg.TelegramWebviewProxy = { postEvent() {} };
+  tg.Telegram = { WebApp: { initData: "user=1", version: "8.0", platform: "ios", initDataUnsafe: { user: { id: 700 } }, openLink: (u: string) => tgOpens.push(u) } };
+  opened = [];
+  signInWithPaynet(true, { paynetUrl: "https://app.paynet.test/?m=54883", paynetPrefill: true });
   stub();
   mount();
-  let dialog = await openDialog();
-  assert.ok(paynetRow(dialog)!.className.includes("col-span-2"));
-  cleanup();
-  signInWithPaynet(true);
-  stub();
-  mount();
-  dialog = await openDialog();
-  assert.ok(!paynetRow(dialog)!.className.includes("col-span-2"), "half width next to Click");
+  await toPaynet("12000");
+  await act(async () => {
+    fireEvent.click(document.querySelector("[data-paynet-open]")!);
+  });
+  assert.deepEqual(tgOpens, ["https://app.paynet.test/?m=54883&c=u1&a=1200000"]);
+  assert.deepEqual(opened, []);
 });
 
-test("Hamyon Paynet: shows «Sizning ID raqamingiz», the wrong-ID warning and the any-amount rule, four steps; no amount is required; no order is created; «Orqaga» returns", async () => {
-  signInWithPaynet(true);
+test("Hamyon Paynet: the ID first and biggest, then the typed amount, a short wrong-ID warning, the button; the steps folded; no order; back → «Summa»", async () => {
+  signInWithPaynet(true, { paynetUrl: "https://app.paynet.test/?m=54883" });
   const calls = stub();
   mount();
-  const dialog = await openDialog();
-  const input = dialog.querySelector("input") as HTMLInputElement;
-  await act(async () => {
-    fireEvent.change(input, { target: { value: "37000" } });
-  });
-  await act(async () => {
-    fireEvent.click(paynetRow(dialog)!);
-  });
+  await toPaynet("37000");
   const step = paynetStep() as HTMLElement;
-  assert.ok(step, "the Paynet step opens");
-  assert.ok(within(dialog).getByRole("heading", { name: "Paynet orqali to'lash" }));
-  assert.ok(!step.querySelector("[data-paynet-amount]"), "no amount to pay is shown");
-  assert.ok(!(step.textContent ?? "").includes(groupDigits(37000)), "the dialog amount is not repeated as a requirement");
+  assert.ok(within(screen.getByRole("dialog")).getByRole("heading", { name: "Paynet orqali to'lash" }));
+  assert.equal(document.querySelector('[data-pay-progress] [aria-current="step"]')!.textContent, "Paynet");
+  const card = step.querySelector("[data-paynet-id-card]") as HTMLElement;
+  assert.equal(step.firstElementChild, card, "the ID card is the first thing in the step");
+  assert.match(card.className, /emerald/, "brand-tinted card");
+  assert.equal(card.querySelector("h3")!.textContent, "Sizning SlaydX ID raqamingiz");
   const id = step.querySelector("[data-paynet-id]") as HTMLElement;
   assert.equal(id.textContent, "u1", "the user's id, nothing else");
-  assert.ok(id.className.includes("text-[28px]"), "large");
-  assert.equal(id.previousElementSibling?.textContent, "Sizning ID raqamingiz", "the ID is labelled as the user's own");
-  // Prod incident 2026-10-31 (the amount «3000» typed into the ID field paid user #3000): the warning sits right under the ID.
+  // MUTATION: the size back to 28 px → red (very large digits, owner 2026-11-12).
+  const px = Number(/text-\[(\d+)px\]/.exec(id.className)?.[1] ?? 0);
+  assert.ok(px >= 44 && px <= 56, `ID font ${px}px is 44–56 px`);
+  assert.match(id.className, /font-mono/);
+  assert.equal(card.querySelector("[data-paynet-id-hint]")!.textContent, "Paynet ilovasida «ID» maydoniga aynan shu raqamni kiriting");
+  const copy = within(card).getByRole("button", { name: "SlaydX ID ni nusxalash" });
+  assert.match(copy.className, /\bh-12\b/, "big copy button");
+  assert.equal(copy.textContent, "Nusxalash");
+  assert.equal(step.querySelector("[data-paynet-amount]")!.textContent, `${groupDigits(37_000)} so'm`, "the amount typed in step 1");
+  assert.match(step.querySelector("[data-paynet-summary]")!.textContent ?? "", /^To'lov summasi/);
+  // Prod incident 2026-10-31 (the amount «3000» typed into the ID field paid user #3000): the warning keeps its meaning.
   const warning = step.querySelector("[data-paynet-warning]")!;
-  assert.equal(
-    warning.textContent,
-    "ID maydoniga summani emas, shu raqamni kiriting; to'lashdan oldin Paynet ko'rsatgan ism sizniki ekanini tekshiring.",
-  );
-  assert.ok(warning.compareDocumentPosition(step.querySelector("[data-paynet-steps]")!) & Node.DOCUMENT_POSITION_FOLLOWING, "warning before the steps");
-  assert.equal(
-    step.querySelector("[data-paynet-any-amount]")!.textContent,
-    `Paynet'da istalgan summani to'lashingiz mumkin: eng kami ${groupDigits(MIN_TOPUP_SOUM)}, eng ko'pi ${groupDigits(MAX_TOPUP_SOUM)} so'm. Balansga aynan to'lagan summangiz tushadi.`,
-  );
-  const steps = [...step.querySelectorAll("[data-paynet-steps] li")].map((li) => li.textContent);
-  assert.deepEqual(steps, [
+  assert.equal(warning.textContent, "ID maydoniga summani yozmang. To'lashdan oldin Paynet ko'rsatgan ism sizniki ekanini tekshiring.");
+  const order = ["[data-paynet-id-card]", "[data-paynet-summary]", "[data-paynet-warning]", "[data-paynet-open]", "[data-paynet-howto]"].map((s) => step.querySelector(s)!);
+  for (let i = 1; i < order.length; i++) {
+    assert.ok(order[i - 1]!.compareDocumentPosition(order[i]!) & Node.DOCUMENT_POSITION_FOLLOWING, `order ${i}`);
+  }
+  const howto = step.querySelector("[data-paynet-howto]") as HTMLDetailsElement;
+  assert.equal(howto.tagName, "DETAILS");
+  assert.equal(howto.open, false, "the steps are folded");
+  assert.equal(howto.querySelector("summary")!.textContent, "Qanday to'lanadi?");
+  assert.deepEqual([...step.querySelectorAll("[data-paynet-steps] li")].map((li) => li.textContent), [
     "1Paynet ilovasi yoki terminalini oching",
     "2«SlaydX» xizmatini tanlang",
     "3ID maydoniga ID raqamingizni kiriting",
-    "4Paynet ko'rsatgan ism sizniki ekanini tekshirib, istalgan summani to'lang — u balansga darhol tushadi",
+    "4Paynet ko'rsatgan ism sizniki ekanini tekshirib, to'lang — summa balansga darhol tushadi",
   ]);
-  assert.ok(within(step).getByRole("button", { name: "SlaydX ID ni nusxalash" }).className.includes("h-11"), "44 px touch target");
+  assert.equal(
+    step.querySelector("[data-paynet-any-amount]")!.textContent,
+    `Balansga Paynet'da aynan to'lagan summangiz tushadi (eng kami ${groupDigits(MIN_TOPUP_SOUM)}, eng ko'pi ${groupDigits(MAX_TOPUP_SOUM)} so'm).`,
+  );
   assert.ok(!calls.some((c) => c === "POST /api/payments/orders"), `no order: ${calls.join(" | ")}`);
   await act(async () => {
-    fireEvent.click(within(step).getByRole("button", { name: "Orqaga" }));
+    fireEvent.click(document.querySelector("[data-pay-back]")!);
   });
   assert.ok(!paynetStep());
-  assert.ok(paynetRow(screen.getByRole("dialog")), "back on the method list");
+  assert.ok(document.querySelector('[data-pay-step="amount"]'), "back on «Summa»");
+  assert.match((document.querySelector("[data-pay-amount-input]") as HTMLInputElement).value, /^37.000$/);
 });
 
-test("Hamyon Paynet: signed out → the Paynet row opens login, not the step", async () => {
+test("Hamyon Paynet: signed out → «Davom etish» opens login, not the step", async () => {
   signInWithPaynet(true);
   useAppStore.setState({ sessionChecked: true, loggedIn: false, user: null });
   stub();
   mount();
-  // Signed out the hero has no «To'ldirish»; the dialog is opened the way the quick top-up cards open it.
+  // Signed out the wallet row opens the login itself; a context opener can still open the sheet at Paynet.
   await act(async () => {
-    useUi.getState().open("pay");
+    openPay({ method: "paynet", amount: 20_000 });
   });
-  const dialog = screen.getByRole("dialog");
   await act(async () => {
-    fireEvent.click(paynetRow(dialog)!);
+    fireEvent.click(continueBtn());
   });
   assert.ok(!paynetStep());
   assert.equal(useUi.getState().overlay, "login");
 });
 
-test("Hamyon Paynet: signed in but the user not loaded yet → stays on the method list (no empty step)", async () => {
-  // MUTATION: `!user` dropped from `openPaynet` → the dialog switches to an empty «Paynet orqali to'lash» view.
+test("Hamyon Paynet: signed in but the user not loaded yet → «Davom etish» stays disabled (no empty step)", async () => {
+  // MUTATION: `canContinue` for Paynet dropped → the step is entered with no ID to show.
   signInWithPaynet(true);
   useAppStore.setState({ user: null });
   stub();
   mount();
   await act(async () => {
-    useUi.getState().open("pay");
+    openPay({ method: "paynet", amount: 20_000 });
   });
-  const dialog = screen.getByRole("dialog");
+  assert.ok(continueBtn().disabled);
   await act(async () => {
-    fireEvent.click(paynetRow(dialog)!);
+    fireEvent.click(continueBtn());
   });
-  assert.ok(paynetRow(screen.getByRole("dialog")), "still on the method list");
-  assert.ok(!within(screen.getByRole("dialog")).queryByRole("heading", { name: "Paynet orqali to'lash" }));
+  assert.ok(!paynetStep());
   assert.equal(useUi.getState().overlay, "pay");
 });
 
-test("Hamyon Paynet: copy button writes the ID to the clipboard and says so", async () => {
+test("Hamyon Paynet: copy button writes the ID to the clipboard, says so and flips to «Nusxalandi»", async () => {
+  // MUTATION: the copy handler copies the amount / the label → red.
   signInWithPaynet(true);
   stub();
   const written: string[] = [];
   Object.defineProperty(navigator, "clipboard", { value: { writeText: async (t: string) => void written.push(t) }, configurable: true });
   mount();
-  const dialog = await openDialog();
-  await act(async () => {
-    fireEvent.click(paynetRow(dialog)!);
-  });
+  await toPaynet();
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "SlaydX ID ni nusxalash" }));
   });
   assert.deepEqual(written, ["u1"]);
   assert.equal(paynetNotice().textContent, "SlaydX ID nusxalandi");
   assert.equal(paynetNotice().getAttribute("data-paynet-notice"), "ok");
+  assert.equal(screen.getByRole("button", { name: "SlaydX ID ni nusxalash" }).textContent, "Nusxalandi");
 });
 
 test("Hamyon Paynet: copy falls back to execCommand without the Clipboard API, and reports a failure", async () => {
@@ -610,10 +711,7 @@ test("Hamyon Paynet: copy falls back to execCommand without the Clipboard API, a
   const exec: string[] = [];
   docExec.execCommand = (c: string) => (exec.push(c), true);
   mount();
-  const dialog = await openDialog();
-  await act(async () => {
-    fireEvent.click(paynetRow(dialog)!);
-  });
+  await toPaynet();
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "SlaydX ID ni nusxalash" }));
   });
@@ -626,37 +724,8 @@ test("Hamyon Paynet: copy falls back to execCommand without the Clipboard API, a
   });
   assert.equal(paynetNotice().getAttribute("data-paynet-notice"), "error");
   assert.match(paynetNotice().textContent ?? "", /Nusxalab bo'lmadi/);
+  assert.equal(screen.getByRole("button", { name: "SlaydX ID ni nusxalash" }).textContent, "Nusxalash", "no «copied» on a failure");
   assert.equal(document.querySelector("[data-paynet-id]")!.textContent, "u1", "the ID stays visible to copy by hand");
-});
-
-test("Hamyon Paynet: «Paynet ilovasida to'lash» is a safe external link shown only when the server sends paynetUrl", async () => {
-  signInWithPaynet(true, { paynetUrl: "https://app.paynet.test/?m=54883", paynetPrefill: true });
-  stub();
-  mount();
-  let dialog = await openDialog();
-  await act(async () => {
-    fireEvent.change(dialog.querySelector("input") as HTMLInputElement, { target: { value: "25000" } });
-  });
-  await act(async () => {
-    fireEvent.click(paynetRow(dialog)!);
-  });
-  const link = document.querySelector("[data-paynet-open]") as HTMLAnchorElement;
-  assert.ok(link, "MUTATION: the link block removed");
-  assert.equal(link.getAttribute("href"), "https://app.paynet.test/?m=54883&c=u1&a=2500000");
-  assert.equal(link.getAttribute("target"), "_blank");
-  assert.match(link.getAttribute("rel") ?? "", /noopener/);
-  assert.match(link.getAttribute("rel") ?? "", /noreferrer/);
-  assert.match(link.textContent ?? "", /Paynet ilovasida to'lash/);
-  cleanup();
-  signInWithPaynet(true, { paynetUrl: null });
-  stub();
-  mount();
-  dialog = await openDialog();
-  await act(async () => {
-    fireEvent.click(paynetRow(dialog)!);
-  });
-  assert.ok(paynetStep(), "the step still works");
-  assert.ok(!document.querySelector("[data-paynet-open]"), "no link without paynetUrl");
 });
 
 test("Hamyon Paynet: a Paynet top-up reads «To'ldirish · Paynet» in the ledger and «Paynet» in recent payments", () => {
