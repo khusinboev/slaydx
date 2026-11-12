@@ -3,6 +3,7 @@
 import type { ToolConfig, UserProfile } from "@/lib/types";
 import { slideParamsFor } from "@/lib/generation/slide-params";
 import { AUTHOR_FIELD_IDS, SlideComposer } from "./SlideComposer";
+import { SlideKindSwitch } from "./SlideKindSwitch";
 
 /**
  * Pro slayd formasi — `SlideComposer` ning yupqa o'rami (Formalar 2).
@@ -27,6 +28,7 @@ export function ProSlideForm({ tool, profile }: { tool: ToolConfig; profile: Use
       tool={tool}
       profile={profile}
       kind="pro-slide"
+      top={<SlideKindSwitch current="pro" />}
       fields={[...PRO_MAIN_FIELD_ORDER_1, ...PRO_MAIN_FIELD_ORDER_2, ...PRO_EXTRA_FIELD_ORDER]}
     />
   );

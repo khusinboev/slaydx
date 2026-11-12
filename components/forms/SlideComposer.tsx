@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { FormValues, ToolConfig, UserProfile } from "@/lib/types";
 import { priceFor, profileDefaults } from "@/lib/tools";
@@ -118,10 +118,13 @@ export function SlideComposer({
   profile,
   kind,
   fields,
+  top,
 }: {
   tool: ToolConfig;
   profile: UserProfile;
   kind: SlideTool;
+  /** Drawn first inside the form (the Pro slayd page's «Pro slayd · AI slayd» switch). */
+  top?: ReactNode;
   /** Reyestrdan chiziladigan id lar (inline `topic/language/slideTemplate/slideTheme` dan tashqari). */
   fields: readonly string[];
 }) {
@@ -229,6 +232,7 @@ export function SlideComposer({
   const mode = String(values.mode);
   return (
     <ToolChrome title={tool.pageTitle} submitLabel={tool.submitLabel} price={price} loading={loading} onSubmit={submit} error={error}>
+      {top}
       <Card
         title="Mavzu"
         aside={

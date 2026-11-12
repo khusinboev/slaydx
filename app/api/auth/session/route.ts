@@ -48,6 +48,8 @@ export const GET = handler("auth/session", async (req) => {
       ttsPremium: ttsPremiumAvailable(),
       // `video`: only providers that are enabled AND keyed, and none while the admin switch `video.enabled` is off.
       videoProviders: (await getSetting("video.enabled")) ? videoProvidersAvailable() : [],
+      // «AI slayd» (Pro slayd page): the admin switch and the Gemini key.
+      imageSlide: (await getSetting("image_slide.enabled")) && imagesConfigured(),
       // «Qattiqqo'l domla» is listed among the tools only while the admin switch `domla.enabled` is on.
       domla: await getSetting("domla.enabled"),
       // «AI yordamchi» / «Test ishlash» are listed only while `chat.enabled` / `tests.enabled` are on.

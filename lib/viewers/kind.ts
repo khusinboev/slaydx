@@ -49,6 +49,7 @@ export function viewerKind(id: ToolId): ViewerKind {
   switch (id) {
     case "slide":
     case "pro-slide":
+    case "image-slide":
       return "slides";
     case "resume":
       return "resume";

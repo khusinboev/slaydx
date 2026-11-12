@@ -29,6 +29,7 @@ import { INFOGRAPHIC_LIMITS, PALETTES } from "@/lib/generation/infographic/types
  */
 const SlideForm = lazy(() => import("./SlideForm").then((m) => ({ default: m.SlideForm })));
 const ProSlideForm = lazy(() => import("./ProSlideForm").then((m) => ({ default: m.ProSlideForm })));
+const ImageSlideComposer = lazy(() => import("./ImageSlideComposer").then((m) => ({ default: m.ImageSlideComposer })));
 const ResumeComposer = lazy(() => import("./ResumeComposer").then((m) => ({ default: m.ResumeComposer })));
 const TranslationForm = lazy(() => import("./TranslationForm").then((m) => ({ default: m.TranslationForm })));
 const ImageStudio = lazy(() => import("./ImageStudio").then((m) => ({ default: m.ImageStudio })));
@@ -137,6 +138,7 @@ export function ToolWorkspace({ tool }: { tool: ToolConfig }) {
 function toolForm(tool: ToolConfig, profile: UserProfile, user: ServerUser | null) {
   if (tool.custom === "slide") return <SlideForm tool={tool} profile={profile} />;
   if (tool.custom === "pro-slide") return <ProSlideForm tool={tool} profile={profile} />;
+  if (tool.custom === "image-slide") return <ImageSlideComposer tool={tool} profile={profile} />;
   if (tool.custom === "resume") return <ResumeComposer tool={tool} profile={profile} />;
   if (tool.custom === "translation") return <TranslationForm tool={tool} />;
   if (tool.custom === "image") return <ImageStudio tool={tool} />;

@@ -6,7 +6,7 @@ import { normalizeVoiceChoice, normalizeVoiceProvider } from "../generation/tts/
 import { enqueueGeneration, IDEMPOTENCY_WINDOW_HOURS } from "./jobs";
 import { sourceCharsForRequest } from "./source-upload";
 import { missingRequired, preflightError, topicOf } from "../tools";
-import { env, imageModelUnavailable, videoProviderUnavailable, voiceProviderUnavailable } from "./env";
+import { env, imageModelUnavailable, imagesConfigured, videoProviderUnavailable, voiceProviderUnavailable } from "./env";
 import { ensureProviderKeys } from "./providers/store";
 import { queueLimits } from "./queue-limits";
 import { queryOne } from "./db";
@@ -234,6 +234,13 @@ export async function prepareGeneration(input: SubmitInput): Promise<PreparedGen
    * Video: the tool switch, the provider (enabled AND keyed RIGHT NOW) and the start image (the user's own upload) are
    * checked before anything is priced or charged. A replay is a job that already exists.
    */
+  // AI slide: the admin switch and the Gemini key, before anything is priced or charged.
+  if (tool.id === "image-slide" && !replay) {
+    if (!(await getSetting("image_slide.enabled"))) throw new ApiError("AI slayd hozircha mavjud emas.", 400, { code: "image_slide_disabled" });
+    await ensureProviderKeys();
+    if (!imagesConfigured()) throw new ApiError("Rasm xizmati vaqtincha o‘chiq: serverda rasm kaliti sozlanmagan.", 400);
+  }
+
   if (tool.id === "video" && !replay) {
     // Ships DARK: `video.enabled` defaults to false, so a deploy with a keyed provider (prod has a Gemini key) offers nothing until the owner switches it on.
     if (!(await getSetting("video.enabled"))) throw new ApiError("Video yaratish hozircha mavjud emas.", 400, { code: "video_disabled" });

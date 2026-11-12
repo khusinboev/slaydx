@@ -30,6 +30,7 @@ type Row = { format: string; on: DownloadFormatId[]; off: DownloadFormatId[] };
 const MATRIX: Record<string, Row> = {
   slide: { format: "pptx", on: ["native", "pdf", "slides-png"], off: ["native"] },
   "pro-slide": { format: "pptx", on: ["native", "pdf", "slides-png"], off: ["native"] },
+  "image-slide": { format: "pptx", on: ["native", "pdf", "slides-png"], off: ["native"] },
   coursework: { format: "docx", on: ["native", "pdf"], off: ["native"] },
   referat: { format: "docx", on: ["native", "pdf"], off: ["native"] },
   "mustaqil-ish": { format: "docx", on: ["native", "pdf"], off: ["native"] },

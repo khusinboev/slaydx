@@ -509,7 +509,7 @@ async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): 
   // Faqat slayd/pro-slayd jonli deka yuboradi (`slide-write.ts`/`slide-images.ts`
   // shu ikkisi uchun `onProgress` chaqiradi) — boshqa vositalarga reporter kerak
   // emas.
-  const live = tool.id === "slide" || tool.id === "pro-slide" ? new LiveReporter(job.id, job.lease, job) : null;
+  const live = tool.id === "slide" || tool.id === "pro-slide" || tool.id === "image-slide" ? new LiveReporter(job.id, job.lease, job) : null;
 
   /*
    * Tarjima dvigateli haqiqiy bosqich yuborganidan keyin soxta egri

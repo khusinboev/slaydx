@@ -256,7 +256,9 @@ test("kalitsiz xizmat sotilmaydi", async () => {
   assert.ok(toolBlockedReason(TOOL_BY_ID["studio-image"], noImages), "Studio rasm kalitisiz to'silishi kerak");
   assert.equal(toolBlockedReason(TOOL_BY_ID["studio-image"], { ...noImages, studioImageModels: ["openai/gpt-image"] }), null, "GPT Image alone serves the Studio");
   assert.ok(toolBlockedReason(TOOL_BY_ID["studio-image"], { ...all, studioImageModels: [] }), "no Studio model available -> blocked");
-  for (const t of TOOLS.filter((x) => x.custom !== "image" && x.custom !== "portrait" && x.custom !== "studio-image")) {
+  // AI slayd draws every slide with the Gemini image model: blocked too.
+  assert.ok(toolBlockedReason(TOOL_BY_ID["image-slide"], noImages), "AI slayd rasm kalitisiz to'silishi kerak");
+  for (const t of TOOLS.filter((x) => x.custom !== "image" && x.custom !== "portrait" && x.custom !== "studio-image" && x.custom !== "image-slide")) {
     assert.equal(toolBlockedReason(t, noImages), null, `${t.id}: matn xizmati ishlashi kerak`);
   }
   // Video: no provider -> hidden (whatever the text / image keys say); a provider -> shown (whatever they say).

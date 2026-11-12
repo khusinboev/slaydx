@@ -259,6 +259,8 @@ export type ServerUser = {
 export type Features = {
   llm: boolean;
   images: boolean;
+  /** «AI slayd» can be ordered (`image_slide.enabled` + Gemini key); absent on an older server. */
+  imageSlide?: boolean;
   /** A voice provider is usable (podcast, greeting); absent on an older server. */
   tts?: boolean;
   /** `rasm` models that are usable now (provider enabled + key); absent on an older server. */

@@ -1,4 +1,5 @@
 import { extractMeta } from "./meta";
+import { imageSlideCount } from "./image-slide/models";
 import { translationChars } from "../tools";
 import { teacherKindOf } from "./teacher/registry";
 import { TEACHER_LIMITS, type TeacherKind } from "./teacher/types";
@@ -346,6 +347,11 @@ export function workBudgetMs(pages: number): number {
  *   oshmaydi — operator bitta o'zgaruvchi bilan hamma narsani cheklay
  *   olishi kerak.
  */
+/** AI slide budget parts (`budgetFor`): the writer call, one round of parallel draws, the parallel lanes. */
+export const IMAGE_SLIDE_TEXT_MS = 150_000;
+export const IMAGE_SLIDE_ROUND_MS = 110_000;
+export const IMAGE_SLIDE_LANES = 10;
+
 export function budgetFor(tool: ToolConfig, values: FormValues, cap: number): number {
   const fixed = FIXED[tool.id];
   let want = fixed;
@@ -372,6 +378,15 @@ export function budgetFor(tool: ToolConfig, values: FormValues, cap: number): nu
   const audioKind = audioKindOf(tool.id);
   if (want === undefined && audioKind) {
     want = audioBudgetMs(audioKind, normalizeAudioMinutes(audioKind, values.durationMin));
+  }
+  /*
+   * AI slide: the writer call, slide 1 alone (it is the style reference), then the rest in rounds of `DRAW_LANES`.
+   * One round ≈ one call (29–113 s measured at 2K) plus the proofreading. 30 slides: 150 + 2 × 110 + 3 × 110 = 700 s,
+   * clamped by the worker's job timeout like every tool (a slide that cannot start in time is refunded).
+   */
+  if (want === undefined && tool.id === "image-slide") {
+    const n = imageSlideCount(values);
+    want = IMAGE_SLIDE_TEXT_MS + 2 * IMAGE_SLIDE_ROUND_MS + Math.ceil((n - 1) / IMAGE_SLIDE_LANES) * IMAGE_SLIDE_ROUND_MS;
   }
   // Infografika: hajm — BLOK soni (tur chegarasi bilan, forma qoidasi bilan bir xil).
   if (want === undefined && tool.id === "infographic") {

@@ -301,6 +301,8 @@ export async function slideViewCopies(
   const byId = new Map(assets.map((a) => [a.assetId, a]));
   const wanted = new Set<string>();
   for (const s of doc.slides) {
+    // A whole-slide picture (AI slide) keeps its full size on screen: a 1024 px copy would blur its small text.
+    if (s.fullImage) continue;
     const m = s.image?.url ? re.exec(s.image.url) : null;
     if (m && byId.has(m[1])) wanted.add(m[1]);
   }

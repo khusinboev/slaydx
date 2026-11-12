@@ -136,6 +136,7 @@ const STAGES: Record<ProgressKind, readonly StageDef[]> = {
 const KIND_BY_TOOL: Record<ToolId, ProgressKind> = {
   slide: "slides",
   "pro-slide": "slides",
+  "image-slide": "slides",
   coursework: "doc",
   referat: "doc",
   "mustaqil-ish": "doc",
