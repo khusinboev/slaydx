@@ -93,9 +93,11 @@ export const SINGLE_LINE = 1.15;
 export const SPACER_PT = 1 * SINGLE_LINE;
 /** What the zones leave free under the tail (mm): rounding in Word / LibreOffice must not push the tail to page 2. */
 const SLACK_MM = 3;
+/** Gap between an underline and the small note under it (pt). */
+export const NOTE_GAP_PT = 6;
 
 const PAGE = { widthMm: 210, heightMm: 297 };
-const MARGIN_CLASSIC = { top: 18, right: 25, bottom: 18, left: 25 };
+const MARGIN_CLASSIC = { top: 20, right: 22, bottom: 18, left: 22 };
 const MARGIN_OTM = { top: 20, right: 15, bottom: 20, left: 30 };
 const BORDER = { offsetPt: 14, linePt: 0.75 };
 
@@ -185,19 +187,23 @@ type Draft = { margin: TitulPlan["page"]["margin"]; zones: Array<Omit<TitulZone,
 /** The owner's sample: framed, caps head, «… FANIDAN», big heading, topic on a line, signature lines. */
 function classic(c: Ctx): Draft {
   const { input: inp, L } = c;
-  const head: ParaOpts = { sizePt: 16, line: 1.2, afterPt: 14 };
-  const sig = (id: string, label: string, name: string, note: string, afterPt: number): TitulLineRow => ({
+  const head: ParaOpts = { sizePt: 17.5, line: 1.1, afterPt: 14 };
+  // Both signature rows share one label column, wide enough for the longer label (Russian «Научный руководитель:»).
+  const sigLabels = { author: run(c, "author.label", L.doneBy, { bold: true }), supervisor: run(c, "supervisor.label", checkerLabel(c), { bold: true }) };
+  const sigLabelMm = labelMmFor([sigLabels.author, sigLabels.supervisor], 11, 23);
+  const topicLabel = run(c, "topic.label", L.topic, { bold: true });
+  const sig = (id: "author" | "supervisor", name: string, note: string, afterPt: number): TitulLineRow => ({
     k: "line",
-    label: run(c, `${id}.label`, label, { bold: true }),
+    label: sigLabels[id],
     labelSizePt: 11,
     value: run(c, `${id}.value`, name),
     valueSizePt: 12,
     valueAlign: "center",
     note: note ? run(c, `${id}.note`, note, { italic: true }) : null,
     noteSizePt: 7.5,
-    labelMm: 25,
-    widthMm: 112,
-    offsetMm: 24,
+    labelMm: sigLabelMm,
+    widthMm: 110,
+    offsetMm: 28,
     beforePt: 0,
     afterPt,
   });
@@ -206,7 +212,7 @@ function classic(c: Ctx): Draft {
     zones: [
       {
         id: "top",
-        share: 92,
+        share: 90,
         valign: "top",
         items: keep([
           ...ministryParas(c, head),
@@ -220,20 +226,20 @@ function classic(c: Ctx): Draft {
         share: 76,
         valign: "center",
         items: keep([
-          inp.subject && textPara(c, "subject", caps(L.subject(inp.subject)), { bold: true }, { sizePt: 12, afterPt: 22 }),
-          textPara(c, "heading", headingOf(c), { bold: true }, { sizePt: 28, spacingPt: 2, afterPt: 26 }),
+          inp.subject && textPara(c, "subject", caps(L.subject(inp.subject)), { bold: true }, { sizePt: 13, afterPt: 36 }),
+          textPara(c, "heading", headingOf(c), { bold: true }, { sizePt: 28, spacingPt: 2, afterPt: 38 }),
           {
             k: "line",
-            label: run(c, "topic.label", L.topic, { bold: true }),
-            labelSizePt: 16,
+            label: topicLabel,
+            labelSizePt: 17,
             value: run(c, "topic.value", inp.topic),
-            valueSizePt: 16,
+            valueSizePt: 17,
             valueAlign: "left",
             note: null,
             noteSizePt: 7.5,
-            labelMm: 23,
-            widthMm: 150,
-            offsetMm: 5,
+            labelMm: labelMmFor([topicLabel], 17, 22.5),
+            widthMm: 152,
+            offsetMm: 11,
             beforePt: 0,
             afterPt: 0,
           } satisfies TitulLineRow,
@@ -244,19 +250,25 @@ function classic(c: Ctx): Draft {
         share: 0,
         valign: "bottom",
         items: [
-          sig("author", L.doneBy, inp.author, L.studentNote(inp.course, inp.group), 18),
-          sig("supervisor", checkerLabel(c), inp.supervisor, inp.supervisorRole ? `(${inp.supervisorRole})` : "", 34),
+          sig("author", inp.author, L.studentNote(inp.course, inp.group), 22),
+          sig("supervisor", inp.supervisor, inp.supervisorRole ? `(${inp.supervisorRole})` : "", 0),
         ],
       },
     ],
-    tail: keep([textPara(c, "cityYear", caps(`${cityOf(c)} — ${inp.year}`), { bold: true }, { sizePt: 11, spacingPt: 1.5 })]),
+    tail: keep([textPara(c, "cityYear", caps(`${cityOf(c)} — ${inp.year}`), { bold: true }, { sizePt: 11, spacingPt: 0.7, beforePt: 46 })]),
   };
+}
+
+/** A label column (mm) that holds the widest of `labels` on one line at `sizePt`, never narrower than `minMm`. */
+function labelMmFor(labels: TitulRun[], sizePt: number, minMm: number): number {
+  const widest = Math.max(0, ...labels.map((r) => textWidthPt([r], "", sizePt, 0)));
+  return Math.max(minMm, Math.ceil(widest / PT_PER_MM + 3));
 }
 
 /** The common OTM head: ministry and university in bold caps, faculty and department as typed. */
 function otmHead(c: Ctx, size = 14): TitulPara[] {
   const { input: inp, L } = c;
-  const o: ParaOpts = { sizePt: size, afterPt: 6 };
+  const o: ParaOpts = { sizePt: size, line: 1.1, afterPt: 9 };
   return keep([
     ...ministryParas(c, o),
     textPara(c, "university", caps(inp.university), { bold: true }, o),
@@ -409,7 +421,7 @@ function dissertation(c: Ctx): Draft {
     zones: [
       {
         id: "top",
-        share: 92,
+        share: 90,
         valign: "top",
         items: keep([
           ...ministryParas(c, head),
@@ -492,7 +504,7 @@ export function itemHeightPt(it: TitulItem, contentMm: number): number {
   const avail = (it.widthMm - it.labelMm) * PT_PER_MM;
   const valueLines = lineCount(textWidthPt([it.value], "", it.valueSizePt, 0), avail);
   const row = Math.max(lineHeightPt(it.labelSizePt, 1), valueLines * lineHeightPt(it.valueSizePt, 1));
-  const note = it.note ? lineHeightPt(it.noteSizePt, 1) : 0;
+  const note = it.note ? NOTE_GAP_PT + lineHeightPt(it.noteSizePt, 1) : 0;
   return it.beforePt + row + note + Math.max(it.afterPt, SPACER_PT);
 }
 

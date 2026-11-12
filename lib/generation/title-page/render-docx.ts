@@ -16,7 +16,7 @@ import {
   VerticalAlign,
   WidthType,
 } from "docx";
-import { contentWidthMm, planTitlePage, SINGLE_LINE, type TitulAlign, type TitulItem, type TitulLineRow, type TitulPara, type TitulPlan } from "./layout";
+import { contentWidthMm, NOTE_GAP_PT, planTitlePage, SINGLE_LINE, type TitulAlign, type TitulItem, type TitulLineRow, type TitulPara, type TitulPlan } from "./layout";
 import type { TitulModel } from "./types";
 
 /**
@@ -78,6 +78,7 @@ function paragraph(plan: TitulPlan, p: TitulPara): Paragraph {
     alignment: ALIGN[p.align],
     spacing: { before: tw(p.beforePt), after: tw(p.afterPt), line: lineOf(p.line), lineRule: LineRuleType.AUTO },
     ...(p.indentMm ? { indent: { left: twip(p.indentMm) } } : {}),
+    run: { font: plan.font, size: hp(p.sizePt) },
     children,
   });
 }
@@ -86,14 +87,17 @@ function paragraph(plan: TitulPlan, p: TitulPara): Paragraph {
 function spacer(font: string, beforePt: number, afterPt: number): Paragraph {
   return new Paragraph({
     spacing: { before: tw(beforePt), after: tw(afterPt), line: 240, lineRule: LineRuleType.AUTO },
+    // The paragraph MARK decides the height of an empty paragraph, not its (empty) run.
+    run: { font, size: 2 },
     children: [new TextRun({ text: "", font, size: 2 })],
   });
 }
 
-function cellParagraph(plan: TitulPlan, text: string, sizePt: number, align: TitulAlign, o: { bold?: boolean; italic?: boolean }): Paragraph {
+function cellParagraph(plan: TitulPlan, text: string, sizePt: number, align: TitulAlign, o: { bold?: boolean; italic?: boolean }, beforePt = 0): Paragraph {
   return new Paragraph({
     alignment: ALIGN[align],
-    spacing: { before: 0, after: 0, line: 240, lineRule: LineRuleType.AUTO },
+    spacing: { before: tw(beforePt), after: 0, line: 240, lineRule: LineRuleType.AUTO },
+    run: { font: plan.font, size: hp(sizePt) },
     children: [textRun(plan.font, text, sizePt, o)],
   });
 }
@@ -121,7 +125,7 @@ function lineRow(plan: TitulPlan, it: TitulLineRow): Array<Paragraph | Table> {
   if (it.note) {
     rows.push(
       new TableRow({
-        children: [cell([spacer(plan.font, 0, 0)], labelW), cell([cellParagraph(plan, it.note.text, it.noteSizePt, "center", it.note)], valueW)],
+        children: [cell([spacer(plan.font, 0, 0)], labelW), cell([cellParagraph(plan, it.note.text, it.noteSizePt, "center", it.note, NOTE_GAP_PT)], valueW)],
       }),
     );
   }
