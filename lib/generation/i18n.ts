@@ -976,3 +976,199 @@ export function slideLabels(code: string): SlideLabels {
   const normalized = (code || "uz").toLowerCase();
   return SLIDE_LABELS[normalized] ?? SLIDE_LABELS.en;
 }
+
+/* ────────────────────────── «Titul» (title-page builder) ────────────────────────── */
+
+/**
+ * Fixed labels of the free «Titul» tool (`lib/generation/title-page/`). Its
+ * label language is its own choice (Uzbek Latin / Uzbek Cyrillic / Russian),
+ * independent of the interface; the user's own texts stay as typed. Both the
+ * DOCX and the viewer read these through `planTitlePage` only.
+ */
+export type TitulLabelLang = "uz" | "uz-cyrl" | "ru";
+
+export type TitulLabels = {
+  ministryHigher: string;
+  ministrySchool: string;
+  faculty: (name: string) => string;
+  department: (name: string) => string;
+  /** «"Kafedra" kafedrasi» — the dissertation's department line. */
+  departmentQuoted: (name: string) => string;
+  /** «Dasturlash asoslari fanidan» (classic draws it in caps). */
+  subject: (name: string) => string;
+  /** «"Dasturlash asoslari" fanidan». */
+  subjectQuoted: (name: string) => string;
+  work: { coursework: string; bmi: string; independent: string; referat: string; practice: string; lab: string; practical: string; master: string };
+  number: (n: string) => string;
+  topic: string;
+  doneBy: string;
+  checker: { accepted: string; checked: string; supervisor: string };
+  /** «(3-kurs, 912-21 guruhi)» under the author's line; "" when both are empty. */
+  studentNote: (course: string, group: string) => string;
+  /** «3-kurs 912-21 guruh talabasi»; "" when both are empty. */
+  student: (course: string, group: string) => string;
+  /** BMI: «4-kurs 912-21 talabasi»; "" when both are empty. */
+  bmiStudent: (course: string, group: string) => string;
+  /** The topic phrase and where it stands: uz «… mavzusida» (after), ru «на тему …» (before). */
+  topicPhrase: { text: string; before: boolean };
+  /** BMI: uz «… mavzusidagi» (after), ru «на тему» (before). */
+  bmiTopicPhrase: { text: string; before: boolean };
+  /** right-block: «60610100 – "Kompyuter injiniringi" ta'lim yo'nalishi». */
+  direction: (code: string, name: string) => string;
+  /** BMI: «60610100 – "Kompyuter injiniringi" yo'nalishi». */
+  bmiDirection: (code: string, name: string) => string;
+  allowDefense: string;
+  dean: (faculty: string) => string;
+  head: (department: string) => string;
+  /** The date line to fill in by hand. */
+  dateBlank: (year: number) => string;
+  reviewer: string;
+  manuscript: string;
+  udk: string;
+  purpose: (code: string, speciality: string) => string;
+  dissertation: string;
+  /** The default city in this language (also replaces a typed «Toshkent» in another script). */
+  city: string;
+};
+
+const joinWords = (parts: Array<string | false | undefined>, sep = " ") =>
+  parts.filter((p): p is string => Boolean(p && p.trim())).join(sep);
+const coded = (code: string, text: string) => joinWords([code && `${code} –`, text]);
+
+const TITUL_UZ: TitulLabels = {
+  ministryHigher: UZ.ministryHigher.replace("\n", " "),
+  ministrySchool: UZ.ministrySchool.replace("\n", " "),
+  faculty: UZ.faculty,
+  department: UZ.department,
+  departmentQuoted: (n) => (/kafedra/i.test(n) ? n : `“${n}” kafedrasi`),
+  subject: (n) => `${n} fanidan`,
+  subjectQuoted: (n) => `“${n}” fanidan`,
+  work: {
+    coursework: "KURS ISHI",
+    bmi: "BITIRUV MALAKAVIY ISHI",
+    independent: "MUSTAQIL ISH",
+    referat: "REFERAT",
+    practice: "AMALIYOT HISOBOTI",
+    lab: "LABORATORIYA ISHI",
+    practical: "AMALIY ISH",
+    master: "MAGISTRLIK DISSERTATSIYASI",
+  },
+  number: (n) => `№ ${n}`,
+  topic: "Mavzu:",
+  doneBy: "Bajardi:",
+  checker: { accepted: "Qabul qildi:", checked: "Tekshirdi:", supervisor: "Ilmiy rahbar:" },
+  studentNote: (c, g) => {
+    const t = joinWords([c && UZ.course(c), g && (/guruh/i.test(g) ? g : `${g} guruhi`)], ", ");
+    return t ? `(${t})` : "";
+  },
+  student: (c, g) => (c || g ? joinWords([c && UZ.course(c), g && (/guruh/i.test(g) ? g : `${g} guruh`), "talabasi"]) : ""),
+  bmiStudent: (c, g) => (c || g ? joinWords([c && UZ.course(c), g, "talabasi"]) : ""),
+  topicPhrase: { text: "mavzusida", before: false },
+  bmiTopicPhrase: { text: "mavzusidagi", before: false },
+  direction: (code, n) => coded(code, `“${n}” ta’lim yo‘nalishi`),
+  bmiDirection: (code, n) => coded(code, `“${n}” yo‘nalishi`),
+  allowDefense: "Himoyaga ruxsat etilsin",
+  dean: (f) => (f ? `${UZ.faculty(f)} dekani` : "Fakultet dekani"),
+  head: (d) => (d ? `${UZ.department(d)} mudiri` : "Kafedra mudiri"),
+  dateBlank: (y) => `«___» ____________ ${y} y.`,
+  reviewer: "Taqrizchi:",
+  manuscript: "Qo‘lyozma huquqida",
+  udk: "UDK:",
+  purpose: (code, s) => coded(code, `${s} mutaxassisligi bo‘yicha magistr akademik darajasini olish uchun yozilgan`),
+  dissertation: "DISSERTATSIYA",
+  city: "Toshkent",
+};
+
+const TITUL_UZ_CYRL: TitulLabels = {
+  ministryHigher: "ЎЗБЕКИСТОН РЕСПУБЛИКАСИ ОЛИЙ ТАЪЛИМ, ФАН ВА ИННОВАЦИЯЛАР ВАЗИРЛИГИ",
+  ministrySchool: "ЎЗБЕКИСТОН РЕСПУБЛИКАСИ МАКТАБГАЧА ВА МАКТАБ ТАЪЛИМИ ВАЗИРЛИГИ",
+  faculty: (n) => (/факультет|fakultet/i.test(n) ? n : `${n} факультети`),
+  department: (n) => (/кафедра|kafedra/i.test(n) ? n : `${n} кафедраси`),
+  departmentQuoted: (n) => (/кафедра|kafedra/i.test(n) ? n : `“${n}” кафедраси`),
+  subject: (n) => `${n} фанидан`,
+  subjectQuoted: (n) => `“${n}” фанидан`,
+  work: {
+    coursework: "КУРС ИШИ",
+    bmi: "БИТИРУВ МАЛАКАВИЙ ИШИ",
+    independent: "МУСТАҚИЛ ИШ",
+    referat: "РЕФЕРАТ",
+    practice: "АМАЛИЁТ ҲИСОБОТИ",
+    lab: "ЛАБОРАТОРИЯ ИШИ",
+    practical: "АМАЛИЙ ИШ",
+    master: "МАГИСТРЛИК ДИССЕРТАЦИЯСИ",
+  },
+  number: (n) => `№ ${n}`,
+  topic: "Мавзу:",
+  doneBy: "Бажарди:",
+  checker: { accepted: "Қабул қилди:", checked: "Текширди:", supervisor: "Илмий раҳбар:" },
+  studentNote: (c, g) => {
+    const t = joinWords([c && `${c}-курс`, g && (/гуруҳ|guruh/i.test(g) ? g : `${g} гуруҳи`)], ", ");
+    return t ? `(${t})` : "";
+  },
+  student: (c, g) => (c || g ? joinWords([c && `${c}-курс`, g && (/гуруҳ|guruh/i.test(g) ? g : `${g} гуруҳ`), "талабаси"]) : ""),
+  bmiStudent: (c, g) => (c || g ? joinWords([c && `${c}-курс`, g, "талабаси"]) : ""),
+  topicPhrase: { text: "мавзусида", before: false },
+  bmiTopicPhrase: { text: "мавзусидаги", before: false },
+  direction: (code, n) => coded(code, `“${n}” таълим йўналиши`),
+  bmiDirection: (code, n) => coded(code, `“${n}” йўналиши`),
+  allowDefense: "Ҳимояга рухсат этилсин",
+  dean: (f) => (f ? `${/факультет|fakultet/i.test(f) ? f : `${f} факультети`} декани` : "Факультет декани"),
+  head: (d) => (d ? `${/кафедра|kafedra/i.test(d) ? d : `${d} кафедраси`} мудири` : "Кафедра мудири"),
+  dateBlank: (y) => `«___» ____________ ${y} й.`,
+  reviewer: "Тақризчи:",
+  manuscript: "Қўлёзма ҳуқуқида",
+  udk: "УДК:",
+  purpose: (code, s) => coded(code, `${s} мутахассислиги бўйича магистр академик даражасини олиш учун ёзилган`),
+  dissertation: "ДИССЕРТАЦИЯ",
+  city: "Тошкент",
+};
+
+const TITUL_RU: TitulLabels = {
+  ministryHigher: "МИНИСТЕРСТВО ВЫСШЕГО ОБРАЗОВАНИЯ, НАУКИ И ИННОВАЦИЙ РЕСПУБЛИКИ УЗБЕКИСТАН",
+  ministrySchool: "МИНИСТЕРСТВО ДОШКОЛЬНОГО И ШКОЛЬНОГО ОБРАЗОВАНИЯ РЕСПУБЛИКИ УЗБЕКИСТАН",
+  faculty: RU.faculty,
+  department: RU.department,
+  departmentQuoted: (n) => (/кафедр/i.test(n) ? n : `Кафедра «${n}»`),
+  subject: (n) => `по дисциплине «${n}»`,
+  subjectQuoted: (n) => `по дисциплине «${n}»`,
+  work: {
+    coursework: "КУРСОВАЯ РАБОТА",
+    bmi: "ВЫПУСКНАЯ КВАЛИФИКАЦИОННАЯ РАБОТА",
+    independent: "САМОСТОЯТЕЛЬНАЯ РАБОТА",
+    referat: "РЕФЕРАТ",
+    practice: "ОТЧЁТ ПО ПРАКТИКЕ",
+    lab: "ЛАБОРАТОРНАЯ РАБОТА",
+    practical: "ПРАКТИЧЕСКАЯ РАБОТА",
+    master: "МАГИСТЕРСКАЯ ДИССЕРТАЦИЯ",
+  },
+  number: (n) => `№ ${n}`,
+  topic: "Тема:",
+  doneBy: "Выполнил(а):",
+  checker: { accepted: "Принял(а):", checked: "Проверил(а):", supervisor: "Научный руководитель:" },
+  studentNote: (c, g) => {
+    const t = joinWords([c && `${c} курс`, g && (/групп/i.test(g) ? g : `группа ${g}`)], ", ");
+    return t ? `(${t})` : "";
+  },
+  student: (c, g) => (c || g ? joinWords(["студент(ка)", c && `${c} курса`, g && `группы ${g}`]) : ""),
+  bmiStudent: (c, g) => (c || g ? joinWords(["студент(ка)", c && `${c} курса`, g && `группы ${g}`]) : ""),
+  topicPhrase: { text: "на тему", before: true },
+  bmiTopicPhrase: { text: "на тему", before: true },
+  direction: (code, n) => joinWords(["направление образования", coded(code, `«${n}»`)]),
+  bmiDirection: (code, n) => joinWords(["направление", coded(code, `«${n}»`)]),
+  allowDefense: "Допустить к защите",
+  dean: (f) => (f ? `Декан ${/факультет/i.test(f) ? f : `факультета ${f}`}` : "Декан факультета"),
+  head: (d) => (d ? `Заведующий кафедрой ${d.replace(/^кафедра\s+/i, "")}` : "Заведующий кафедрой"),
+  dateBlank: (y) => `«___» ____________ ${y} г.`,
+  reviewer: "Рецензент:",
+  manuscript: "На правах рукописи",
+  udk: "УДК:",
+  purpose: (code, s) => `Диссертация на соискание академической степени магистра по специальности ${coded(code, s)}`,
+  dissertation: "ДИССЕРТАЦИЯ",
+  city: "Ташкент",
+};
+
+export function titulLabels(lang: TitulLabelLang): TitulLabels {
+  if (lang === "ru") return TITUL_RU;
+  if (lang === "uz-cyrl") return TITUL_UZ_CYRL;
+  return TITUL_UZ;
+}

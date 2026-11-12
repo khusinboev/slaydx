@@ -40,7 +40,7 @@ import { asLiveView } from "../viewers/live-view";
 import { liveDocOf, type LiveDeck } from "@/lib/generation/slide-progress";
 import { viewerKind } from "@/lib/viewers/kind";
 import type { Generation } from "@/lib/types";
-import { formatSom } from "@/lib/format";
+import { formatPrice } from "@/lib/format";
 
 /**
  * Where a deleted document's page goes (redesign F0 hand-off): the «Ishlarim»
@@ -690,7 +690,7 @@ export function resultSubtitle(
       : gen.status === "REVOKED"
         ? "Bekor qilindi"
         : gen.step;
-  return [toolTitle, state, formatSom(gen.price)].filter((p) => p && p.trim()).join(" · ");
+  return [toolTitle, state, formatPrice(gen.price)].filter((p) => p && p.trim()).join(" · ");
 }
 
 /** Hisobot xulosasi → chip (`ResultLayout` sarlavhasida). */

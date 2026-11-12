@@ -21,6 +21,7 @@ import { buildInfographicArtifact } from "./infographic/engine";
 import { buildPortraitArtifact } from "./portrait/engine";
 import { buildTranslationArtifact } from "./translate/engine";
 import { buildResumeDoc } from "./resume/write";
+import { buildTitulArtifact } from "./title-page";
 import type { SlideProgressSink } from "./slide-progress";
 import type { TranslationSource } from "./source-types";
 import { buildSlideAcademicDoc } from "./slide-write";
@@ -512,6 +513,8 @@ export function fileSuffix(toolId: string): string {
       return "-tabriknoma";
     case "portrait":
       return "-portret";
+    case "title-page":
+      return "-titul";
     default:
       return "";
   }
@@ -693,6 +696,12 @@ async function buildArtifactInner(
    * rezyume MA'LUMOTI foydalanuvchidan keladi — matn yozilmasa ham
    * hujjat mazmunli chiqadi (maqola/referatdan farqi shu).
    */
+  // «Titul»: a pure template render (no LLM, no network) — the form values ARE the content.
+  if (tool.id === "title-page") {
+    opts.onStage?.({ progress: 50, step: "Titul yig‘ilmoqda" });
+    return buildTitulArtifact(meta, values, `${meta.fileNameHint}${fileSuffix(tool.id)}.docx`);
+  }
+
   if (tool.id === "resume") {
     opts.onStage?.({ progress: 0, step: "Ma’lumotlar tayyorlanmoqda" });
     opts.onStage?.({ progress: 15, step: "Matn yozilmoqda" });

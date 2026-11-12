@@ -19,6 +19,14 @@ export function formatSom(n: number): string {
   return `${groupDigits(n)} so'm`;
 }
 
+/**
+ * A PRICE as the user sees it: «Bepul» for a free tool (`basePrice: 0`, «Titul»), else `formatSom`. Balances keep
+ * `formatSom` («0 so'm» is a real balance); only prices go through here.
+ */
+export function formatPrice(n: number): string {
+  return n <= 0 ? "Bepul" : formatSom(n);
+}
+
 /** A bonus balance or reward — «2 000 bonus so'm» (spent like paid so'm, but never real money). */
 export function formatBonusSom(n: number): string {
   return `${groupDigits(n)} bonus so'm`;

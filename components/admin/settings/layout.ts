@@ -44,6 +44,7 @@ export const TAB_DEFS: readonly TabDef[] = [
       "convert.disabled",
       "convert.daily_limit",
       "slide.image_ai_max",
+      "title.daily_limit",
     ],
   },
   {

@@ -38,6 +38,8 @@ export const MIN_BUDGET_MS = 90_000;
 /** Bet soniga bog'liq bo'lmagan xizmatlar uchun qat'iy byudjet. */
 const FIXED: Partial<Record<ToolId, number>> = {
   image: 90_000,
+  // «Titul»: a pure template render (one DOCX page, no network) — well under a second; 30 s is ample.
+  "title-page": 30_000,
   /*
    * Studio pictures: up to 4 pictures two at a time; GPT Image takes up to 90 s a call (its catalog timeout), so two
    * rounds need more than «Rasm»'s 90 s.

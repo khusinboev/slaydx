@@ -37,6 +37,7 @@ const ArticleComposer = lazy(() => import("./ArticleComposer").then((m) => ({ de
 const EssayComposer = lazy(() => import("./EssayComposer").then((m) => ({ default: m.EssayComposer })));
 const WorkComposer = lazy(() => import("./WorkComposer").then((m) => ({ default: m.WorkComposer })));
 const KonspektComposer = lazy(() => import("./KonspektComposer").then((m) => ({ default: m.KonspektComposer })));
+const TitulComposer = lazy(() => import("./TitulComposer").then((m) => ({ default: m.TitulComposer })));
 const TeacherComposer = lazy(() => import("./TeacherComposer").then((m) => ({ default: m.TeacherComposer })));
 const MediaComposer = lazy(() => import("./MediaComposer").then((m) => ({ default: m.MediaComposer })));
 const InfographicComposer = lazy(() => import("./InfographicComposer").then((m) => ({ default: m.InfographicComposer })));
@@ -148,6 +149,7 @@ function toolForm(tool: ToolConfig, profile: UserProfile, user: ServerUser | nul
   if (tool.custom === "essay") return <EssayComposer tool={tool} />;
   if (tool.custom === "work") return <WorkComposer tool={tool} profile={profile} user={user} />;
   if (tool.custom === "konspekt") return <KonspektComposer tool={tool} />;
+  if (tool.custom === "titul") return <TitulComposer tool={tool} profile={profile} />;
   // O'qituvchi vositalari 2 (AUDIT-20 WP-E): dars rejasi / texnologik
   // xarita / glossariy / keys / test bitta `TeacherComposer` ga o'tadi.
   if (tool.custom === "teacher") return <TeacherComposer tool={tool} profile={profile} user={user} />;

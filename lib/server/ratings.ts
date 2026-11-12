@@ -38,7 +38,7 @@ export async function getRatingReward(): Promise<number> {
 export async function getRatingStatus(userId: string): Promise<RatingStatus> {
   const row = await queryOne<{ stars: number | null; has_finished: boolean; paid: string | null }>(
     `SELECT r.stars,
-            EXISTS (SELECT 1 FROM generations g WHERE g.user_id = $1 AND g.status = 'COMPLETED') AS has_finished,
+            EXISTS (SELECT 1 FROM generations g WHERE g.user_id = $1 AND g.status = 'COMPLETED' AND g.tool_id <> 'title-page') AS has_finished,
             (SELECT t.points_delta::text FROM transactions t WHERE t.kind = 'bonus' AND t.reference = $2) AS paid
        FROM (SELECT 1) one
        LEFT JOIN app_ratings r ON r.user_id = $1`,
@@ -67,7 +67,8 @@ export async function submitRating(userId: string, stars: unknown, feedback: unk
     const u = await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [userId]);
     if (!u.rows[0]) throw new ApiError("Foydalanuvchi topilmadi.", 404, { code: "no_user" });
     const done = await client.query(
-      "SELECT 1 FROM generations WHERE user_id = $1 AND status = 'COMPLETED' LIMIT 1",
+      // The free «Titul» does not count: a free title page must not unlock the one-time bonus so'm of a new account.
+      "SELECT 1 FROM generations WHERE user_id = $1 AND status = 'COMPLETED' AND tool_id <> 'title-page' LIMIT 1",
       [userId],
     );
     if (!done.rows[0]) {
