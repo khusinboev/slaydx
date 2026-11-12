@@ -9,7 +9,8 @@ import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { BalanceChip } from "@/components/shell/BalanceChip";
 import { useReturnToLogin } from "@/components/shell/useReturnToLogin";
 import { useMarketOn } from "@/components/market/MarketClosed";
-import { greetingTitle, homeCells, homeSlides } from "./hub/hub-model";
+import { greetingTitle, homeCells, homeFreeItems, homeSlides } from "./hub/hub-model";
+import { FreeRow } from "./hub/FreeRow";
 import { HubBanner } from "./hub/HubBanner";
 import { HubGrid } from "./hub/HubGrid";
 import { HubSection, HUB_ENTER, HUB_STAGGER_MS, SECTION_LINK_CLASS } from "./hub/HubSection";
@@ -29,13 +30,16 @@ const WIDTH = "max-w-[1040px]";
  *   - header: «Salom, <first name>» (never a phone number — «Salom!» when the
  *     account has no real name), balance chip (→ Hamyon), search (the shell
  *     binds Cmd/Ctrl+K), quick theme, notifications;
- *   - the promo banner (`HubBanner`): market, Studio, AI yordamchi, domla, by their switches;
- *   - the service grid (`HubGrid`): eight cells, Slayd emphasised, «Barchasi» → `/uz/create`;
+ *   - the promo banner (`HubBanner`): market, Titul, AI yordamchi, Test ishlash, Studio, domla, by their switches;
+ *     it turns every 5 s;
+ *   - the service grid (`HubGrid`): twelve cells, Slayd emphasised, a switched-off service replaced by a fallback,
+ *     «Barchasi» → `/uz/create` last;
+ *   - «Bepul xizmatlar» (`FreeRow`): Titul, AI yordamchi, converters, each with a «Bepul» badge;
  *   - «Davom ettirish»: the 3 latest files + «Barchasi →» Ishlarim; signed out,
  *     a login card instead; signed in without a file, nothing;
  *   - «Ishlar bozori»: a rail of popular ready works (`MarketRail`, behind `features.market`).
  *
- * Banner and grid links keep the «+» sheet's login gate. Until the session is
+ * Banner, grid and free-row links keep the «+» sheet's login gate. Until the session is
  * known what depends on a switch is a skeleton of the same size. `?returnTo=`
  * opens the login (`useReturnToLogin`).
  */
@@ -79,15 +83,16 @@ export function HomeHub() {
       <div className={`mx-auto flex w-full ${WIDTH} flex-col gap-5 px-4 pt-1 pb-6 text-[15.5px]`}>
         <HubBanner slides={homeSlides(features, marketOn)} pending={pending} onPick={gate} index={0} />
         <HubGrid cells={homeCells(features)} pending={pending} onPick={gate} index={1} />
+        <FreeRow items={homeFreeItems(features)} onPick={gate} index={2} />
         {signedOut ? (
-          <div className={HUB_ENTER} style={{ animationDelay: `${2 * HUB_STAGGER_MS}ms` }}>
+          <div className={HUB_ENTER} style={{ animationDelay: `${3 * HUB_STAGGER_MS}ms` }}>
             <SignedOutCard onLogin={() => open("login")} />
           </div>
         ) : noFiles ? null : (
           <HubSection
             id="recent"
             title="Davom ettirish"
-            index={2}
+            index={3}
             action={
               <Link href="/uz/files" data-hub-all-files className={SECTION_LINK_CLASS}>
                 Barchasi
@@ -98,7 +103,7 @@ export function HomeHub() {
             <RecentFiles state={recent} />
           </HubSection>
         )}
-        <MarketRail index={3} />
+        <MarketRail index={4} />
       </div>
     </div>
   );
