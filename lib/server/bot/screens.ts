@@ -242,8 +242,8 @@ export function walletScreen(
   user: Pick<ProfileUser, "points" | "quota" | "balance">,
   recent: LedgerItem[],
   bonusPercent = 0,
-  /** Paynet is live: the user's SlaydX ID (what the Paynet agent asks for) and the public app link, when there is one. */
-  paynet: { userId: string; url: string | null } | null = null,
+  /** Paynet is live: the user's SlaydX ID (what the Paynet agent asks for). Text only — paying happens in the app's wallet (owner 2026-11-12: no Paynet button here). */
+  paynet: { userId: string } | null = null,
 ): Screen {
   const quote = [`${tgEmoji("wallet")} ${t(lang, "wallet.balance", { n: t(lang, "unit.som", { n: formatPoints(creditTotal(user)) }) })}`];
   if (user.points > 0) quote.push(`${tgEmoji("star")} ${t(lang, "wallet.bonus", { n: t(lang, "unit.bonusSom", { n: formatPoints(user.points) }) })}`);
@@ -266,7 +266,6 @@ export function walletScreen(
     reply_markup: rows(
       [inlineButton("gift", t(lang, "btn.bonus"), { callback_data: cb.bonus() }, "success")],
       [wallet ? inlineButton("card", t(lang, "btn.topup"), { web_app: { url: wallet } }, "primary") : null],
-      [paynet?.url && isPublicHttps(paynet.url) ? inlineButton("link", t(lang, "btn.paynet"), { url: paynet.url }) : null],
     ),
   };
 }

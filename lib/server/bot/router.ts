@@ -1,4 +1,4 @@
-import { env, paynetAppUrl, paynetConfigured } from "../env";
+import { env, paynetConfigured } from "../env";
 import { query } from "../db";
 import { getUserById, type SessionUser } from "../session";
 import { referralSummary } from "../referrals";
@@ -174,7 +174,7 @@ async function filesPage(ctx: Pick<ChatCtx, "user" | "lang" | "telegramId">, pag
 
 async function walletCard(ctx: Pick<ChatCtx, "user" | "lang">): Promise<Screen> {
   const [recent, percent] = await Promise.all([recentTransactions(ctx.user.id, WALLET_RECENT), getPaymentBonusPercent()]);
-  return walletScreen(ctx.lang, ctx.user, recent, percent, paynetConfigured() ? { userId: String(ctx.user.id), url: paynetAppUrl() } : null);
+  return walletScreen(ctx.lang, ctx.user, recent, percent, paynetConfigured() ? { userId: String(ctx.user.id) } : null);
 }
 
 async function bonusCard(ctx: Pick<ChatCtx, "user" | "lang">): Promise<Screen> {

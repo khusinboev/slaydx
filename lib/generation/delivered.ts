@@ -81,7 +81,7 @@ const IMAGE_PRICE_SHARE_STANDARD = 0;
  * Pro-slayd: rasm UMUMAN chiqmasa (`got = 0`) — narxning YARMI qaytadi.
  *
  * Oddiy slayd/boshqa vositalarda «hech narsa yo'q» to'liq qaytarish
- * (`refundRatio`). Pro-slayd (2 000 tanga/slayd) esa «har mos slaydga AI
+ * (`refundRatio`). Pro-slayd (narx har slaydga, `PRO_SLIDE_PER_SLIDE`) esa «har mos slaydga AI
  * rasm» va'dasi bilan sotiladi: rasm xizmati yiqilsa foydalanuvchi
  * matn, maket, brif va PPTX'ni oladi, lekin bosh va'da bajarilmaydi.
  * Egasi qarori (AUDIT-25, 2026-09-25): 100 % emas, 50 %. Qisman kamomad

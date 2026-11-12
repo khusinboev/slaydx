@@ -408,7 +408,7 @@ test("AI chat proposals and confirmation", { skip }, async (t) => {
     const uid = await mkUser(query, { balance: 200_000 });
     const pro = confirmCard(await ask(uid, { tool: "pro-slide", values: { topic: "Energiya", slideCount: 12 } }));
     assert.equal(pro.price, priceFor(TOOL_BY_ID["pro-slide"], { topic: "Energiya", slideCount: 12 }));
-    assert.equal(pro.price, 24_000);
+    assert.equal(pro.price, 19_200);
     const ref = confirmCard(await ask(uid, { tool: "referat", values: { topic: "Ekologiya", pages: "10-15" } }));
     assert.equal(ref.price, 3000);
     const ref2 = confirmCard(await ask(uid, { tool: "referat", values: { topic: "Ekologiya", pages: "25-30" } }));

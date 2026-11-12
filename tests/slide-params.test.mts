@@ -65,9 +65,10 @@ test("pro-slide: slaydlar soni slayderdan, 4–30 ga qisiladi, narx har slaydga"
   // Eski `quality` qiymati endi hech narsani o'zgartirmaydi.
   assert.equal(meta({ slideCount: 8, quality: "premium_long" }).targetPages, 8);
   assert.equal(priceFor(pro, { slideCount: 17 }), 17 * PRO_SLIDE_PER_SLIDE);
-  assert.equal(priceFor(pro, { slideCount: 4 }), 8000);
-  assert.equal(priceFor(pro, { slideCount: 30 }), 60000);
-  assert.equal(priceFor(pro, { slideCount: 99 }), 60000, "narx ham qisiladi — deka bilan ajralmasin");
+  assert.equal(PRO_SLIDE_PER_SLIDE, 1600, "owner decision 2026-11-12: Pro slayd −20 %");
+  assert.equal(priceFor(pro, { slideCount: 4 }), 6400);
+  assert.equal(priceFor(pro, { slideCount: 30 }), 48000);
+  assert.equal(priceFor(pro, { slideCount: 99 }), 48000, "narx ham qisiladi — deka bilan ajralmasin");
 });
 
 test("oddiy slide: slayder 4–30 (standart 10), 20 tagacha 3 000, keyingi har slayd +500", () => {
