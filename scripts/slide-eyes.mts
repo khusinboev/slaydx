@@ -18,7 +18,7 @@ import { deflateSync } from "node:zlib";
 import { TOOL_BY_ID } from "../lib/tools.ts";
 import type { FormValues } from "../lib/types.ts";
 import { extractMeta } from "../lib/generation/meta.ts";
-import { fallbackSlides, resolveDeckTemplate } from "../lib/generation/slide-write.ts";
+import { fallbackSlides, resolveDeckDesign, resolveDeckTemplate } from "../lib/generation/slide-write.ts";
 import { blocksToBeats } from "../lib/generation/slide-blocks.ts";
 import { expandBeats } from "../lib/generation/slide-templates.ts";
 import { wantSlides } from "../lib/generation/slide-write.ts";
@@ -83,7 +83,7 @@ const PROFILES: Profile[] = [
 function docFor(p: Profile): AcademicDoc {
   const tool = TOOL_BY_ID[p.tool];
   const meta = extractMeta(tool, p.values);
-  const tpl = resolveDeckTemplate(meta);
+  const { tpl, theme } = resolveDeckDesign(meta);
   const want = wantSlides(meta, tpl);
   const beats = blocksToBeats(meta, tpl, expandBeats(tpl, want), want);
   const doc: AcademicDoc = {
@@ -94,7 +94,8 @@ function docFor(p: Profile): AcademicDoc {
     slides: fallbackSlides(meta, tpl, beats),
     slideTemplate: tpl.id,
   };
-  if (meta.slideTheme) doc.slideTheme = meta.slideTheme;
+  doc.slideTheme = theme;
+  doc.slideVisual = tpl.visual;
   if (p.logo) doc.slideLogo = { url: LOGO };
   return doc;
 }

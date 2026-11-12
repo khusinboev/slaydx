@@ -13,12 +13,15 @@ import { deckFooter } from "./slide-identity";
 import { purposeDefaults } from "./slide-purpose";
 import { finalizeQuiz } from "./slide-quiz";
 import { attachSlideImages } from "./slide-images";
+import { slideImagePolicy } from "./slide-stock";
 import { SLIDE_MAX } from "./slide-params";
 import { deckJsonSchema, deckResponseSchema, slideSystem, type SlidePromptCtx } from "./slide-prompt";
 import type { SlideProgressSink } from "./slide-progress";
 import { isGoogleRedirect, runSlideResearch } from "./slide-research";
 import { expandBeats, resolveSlideTemplate, type SlideBeat, type SlideTemplate, type SlideVisual } from "./slide-templates";
 import { getSlideTheme } from "./slide-themes";
+import { chooseDeckDesign, newSlideSeed, seedFromId } from "./slide-design";
+import { mediaContext } from "../media/context";
 import { isSlideLayout, type SlideLayout, type SlideModel, type SlideThemeId } from "./slide-types";
 import type { AcademicDoc, DocMeta, DocSection } from "./types";
 
@@ -1088,9 +1091,24 @@ export function slideStageBudget(
  * mavzudan taxmin. YAGONA joy — differensial test ham shuni chaqiradi.
  */
 export function resolveDeckTemplate(meta: DocMeta): SlideTemplate {
+  return resolveDeckDesign(meta).tpl;
+}
+
+/**
+ * Template + palette of a deck (docs/slide-quality/SPEC.md §A). The CONTENT template comes from the rule above;
+ * with «Avtomatik» the visual is drawn from its design pool and an «auto» palette from the visual's curated list,
+ * both by subject affinity and `meta.slideSeed` (`slide-design.ts`). The returned `tpl` carries the chosen
+ * visual, so every `tpl.visual` reader (limits, prompt targets, image slots, layout) sees the same design.
+ */
+export function resolveDeckDesign(meta: DocMeta): { tpl: SlideTemplate; theme: SlideThemeId } {
   const purpose = purposeDefaults(meta.slidePurpose);
   const wanted = !meta.slideTemplate || meta.slideTemplate === "auto" ? purpose.templateId : meta.slideTemplate;
-  return resolveSlideTemplate(wanted, meta.topic, meta.extra);
+  const content = resolveSlideTemplate(wanted, meta.topic, meta.extra);
+  const design = chooseDeckDesign(
+    { topic: meta.topic, extra: meta.extra, subject: meta.subject, slideTemplate: meta.slideTemplate, slideTheme: meta.slideTheme, slideSeed: meta.slideSeed, toolId: meta.toolId },
+    content,
+  );
+  return { tpl: design.visual === content.visual ? content : { ...content, visual: design.visual }, theme: design.theme };
 }
 
 export type SlideBuildOpts = {
@@ -1102,6 +1120,8 @@ export type SlideBuildOpts = {
    * `plan`/`stage`/`slide`/`deck`/`images`/`image`/`done` bilan to'ldiradi).
    */
   onProgress?: SlideProgressSink;
+  /** Fixed design seed (tests, reproducible live runs); otherwise a fresh one per generation. */
+  seed?: number;
 };
 
 /**
@@ -1124,8 +1144,20 @@ export function slideSections(slides: SlideModel[]): DocSection[] {
     }));
 }
 
-export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, opts: SlideBuildOpts = {}): Promise<AcademicDoc> {
-  const themeId = (meta.slideTheme || "atlas") as SlideThemeId;
+export async function buildSlideAcademicDoc(metaIn: DocMeta, deadline?: number, opts: SlideBuildOpts = {}): Promise<AcademicDoc> {
+  /*
+   * The «Avtomatik» design seed is drawn ONCE per generation and stored in `doc.meta` (docs/slide-quality/SPEC.md
+   * §A): together with the pinned `slideTemplate`/`slideVisual`/`slideTheme` below it keeps a rebuild or an edit of
+   * this deck on the same design. A caller that already has a seed (tests, a deliberate re-run) keeps it.
+   */
+  // Plain «Slayd» only (review M2); the seed comes from the generation id (review m6: stable across worker retries).
+  const generationId = mediaContext()?.generationId;
+  const meta: DocMeta =
+    metaIn.toolId === "slide" && metaIn.slideSeed === undefined
+      ? { ...metaIn, slideSeed: opts.seed ?? (generationId ? seedFromId(generationId) : newSlideSeed()) }
+      : metaIn;
+  const design = resolveDeckDesign(meta);
+  const themeId = design.theme;
   getSlideTheme(themeId);
   /*
    * Shablon: foydalanuvchi tanlagan bo'lsa u; «auto» bo'lsa TAQDIMOT TURI
@@ -1133,7 +1165,7 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, op
    * bo'lsa — mavzudan (`inferSlideTemplate`). Ya'ni tur parametri o'z
    * ta'sirini shu yerda ko'rsatadi, bloklar esa `blocksToBeats` da.
    */
-  const tpl = resolveDeckTemplate(meta);
+  const tpl = design.tpl;
   // Sifat paketi / slayder shu yerda haqiqiy slaydlar soniga aylanadi,
   // foydalanuvchi bloklari esa shablon beats'iga kiritiladi (`deckBeats`
   // ichida `wantSlides` chaqiriladi — ikkinchi nusxa saqlanmaydi).
@@ -1160,6 +1192,7 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, op
     meta,
     theme: themeId,
     template: tpl.id,
+    visual: tpl.visual,
     logo: opts.logo,
   });
   const stage = slideStageBudget(deadline, Date.now(), { research: meta.internetSearch });
@@ -1225,6 +1258,9 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, op
     meta,
     // P8: matni rasmli qutiga sig'maydigan slayd rasm olmaydi — `normalizeSlide` bilan BIR qoida.
     rules: bodyRules(meta, tpl.id),
+    // Plain «Slayd»: hybrid stock + AI pictures under the admin policy (docs/slide-quality/SPEC.md §B).
+    ...(meta.toolId === "slide" ? { hybrid: slideImagePolicy } : {}),
+    onPhase: live ? (phase) => live({ type: "stage", stage: "images", phase }) : undefined,
     onPlanned: live ? (indexes) => live({ type: "images", wait: [...indexes] }) : undefined,
     onImage: live ? (index, url) => live({ type: "image", index, url }) : undefined,
   });

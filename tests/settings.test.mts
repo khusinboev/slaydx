@@ -86,6 +86,9 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "tests.minutes_all",
     "tests.points_per_correct",
     "image_slide.enabled",
+    // Plain «Slayd» AI picture fallback (docs/slide-quality/SPEC.md §B).
+    "slide.image_ai_fallback",
+    "slide.image_ai_max",
     "video.enabled",
     "video.max_concurrent",
     "media.core.image",

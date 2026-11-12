@@ -1014,7 +1014,56 @@ function slideCases(): Case[] {
         ];
       },
     },
+    ...defaultSlideCases(),
   ];
+}
+
+/**
+ * Slide quality (docs/slide-quality/SPEC.md): three plain «Slayd» decks with the form's UNTOUCHED defaults — the
+ * way ~70 % of real decks are made. Only the topic differs (natural science, history, economics/IT); design,
+ * palette, audience and pictures are whatever the engine picks. The checks print what the owner complained about:
+ * design + palette, layout mix, picture share and the stock/AI split.
+ */
+function defaultSlideCases(): Case[] {
+  const topics: [string, string][] = [
+    ["slide-default-bio", "Fotosintez jarayoni va uning tabiatdagi ahamiyati"],
+    ["slide-default-hist", "Amir Temur davlatining tashkil topishi"],
+    ["slide-default-econ", "Sun’iy intellektning iqtisodiyotga ta’siri"],
+  ];
+  return topics.map(([name, topic]) => ({
+    name,
+    tool: "slide",
+    budgetMs: 260_000,
+    values: {
+      mode: "topic",
+      topic,
+      language: "uz",
+      slideCount: 10,
+      slideAudience: "auto",
+      slidePurpose: "general",
+      textVolume: "standart",
+      titleSlide: true,
+      speakerNotes: true,
+      localExamples: false,
+      internetSearch: false,
+      slideTemplate: "auto",
+    },
+    checks: (file) => {
+      const slides = file.doc.slides ?? [];
+      const content = slides.filter((s) => s.layout !== "title" && s.layout !== "closing" && s.layout !== "agenda");
+      const kinds = new Map<string, number>();
+      for (const s of slides) kinds.set(s.layout, (kinds.get(s.layout) ?? 0) + 1);
+      const rep = file.doc.slideImages;
+      const usd = file.cost?.usd ?? 0;
+      return [
+        ok("design", true, `${file.doc.slideTemplate} / ${file.doc.slideVisual} / ${file.doc.slideTheme}`),
+        ok("layouts", true, [...kinds].map(([k, n]) => `${k}×${n}`).join(" ")),
+        ok("pictures", true, `${slides.filter((s) => s.image).length} slides (${content.filter((s) => s.image).length}/${content.length} content) · report ${JSON.stringify(rep ?? null)}`),
+        ok("cost", true, `$${usd.toFixed(4)} · ${(file.cost?.parts ?? []).map((p) => `${p.kind}:${p.model}×${p.calls}=$${p.usd.toFixed(4)}`).join(", ")}`),
+        ...slideAuditChecks(file.doc),
+      ];
+    },
+  }));
 }
 
 const CASES: Case[] = [

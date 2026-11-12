@@ -3,6 +3,7 @@ import { bodyWantOf } from "../slide-params";
 import type { SlideTemplate } from "../slide-templates";
 import type { DocMeta } from "../types";
 import type { SlidePromptCtx } from "./ctx";
+import { notesVoiceLine, slideVoice } from "../slide-voice";
 
 /**
  * Kengaytmalar — ma'ruzachi izohi, test, qo'shimcha istaklar.
@@ -22,14 +23,13 @@ import type { SlidePromptCtx } from "./ctx";
  * prompt ham va'da qilmaydi.
  */
 export function extensionLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlidePromptCtx): string[] {
-  void tpl;
   void ctx;
   const plan = plannedBlocks(meta, bodyWantOf(meta.targetPages || undefined, meta.titleSlide));
   return [
     `Uzun IZOHNI (nazariy chekinish, tarixiy tafsilot) notes ga yozing — bandlar to‘liq bo‘lsin, lekin izohga aylanmasin.`,
     meta.speakerNotes === false
       ? `notes YOZMANG — notes maydonini bo‘sh qoldiring.`
-      : `Har slaydda notes: notiq OG‘ZAKI aytadigan matn, 40–80 so‘z. Slayddagi bandlarni takrorlamang — misol, izoh yoki savol qo‘shing.`,
+      : `Har slaydda notes: notiq OG‘ZAKI aytadigan matn, 40–80 so‘z. Slayddagi bandlarni takrorlamang — misol, izoh yoki savol qo‘shing. ${notesVoiceLine(slideVoice(meta.slideAudience, tpl.id))}`,
     plan.quizBeats > 0
       ? `NAZORAT TESTI: ${plan.quizBeats} ta savol quiz layoutda; javobni SLAYDGA yozmang — faqat answer indeksiga.`
       : "",

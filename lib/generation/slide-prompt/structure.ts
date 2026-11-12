@@ -6,6 +6,7 @@ import { CHARS_PER_WORD, fmtRange, PROMPT_HEADROOM, TITLE_WORDS } from "../slide
 import type { SlideTemplate } from "../slide-templates";
 import type { DocMeta } from "../types";
 import type { SlidePromptCtx } from "./ctx";
+import { sectionHookLine, slideVoice } from "../slide-voice";
 
 /**
  * Tuzilma — layout qoidalari, bo'sh slaydlarni to'ldirish, jadval.
@@ -77,7 +78,9 @@ export function structureLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlideProm
      * «2–4 ustun» turardi va hisoblangan oraliq bilan ZID edi (W6).
      * Bu qatorlar faqat SONSIZ ko'rsatmani saqlaydi.
      */
-    `section slaydda subtitle — BO‘SH QOLMASIN: shu bo‘limda nima ko‘rilishini aytadigan kirish.`,
+    slideVoice(meta.slideAudience, tpl.id) === "student"
+      ? sectionHookLine()
+      : `section slaydda subtitle — BO‘SH QOLMASIN: shu bo‘limda nima ko‘rilishini aytadigan kirish.`,
     `closing slaydda subtitle — xulosa: asosiy fikr va keyingi qadam. «Savollar va muhokama» kabi bo‘sh ibora emas.`,
     `twoCol va compare: har band to‘liq gap. Bir so‘zli yorliq emas.`,
     `process: har bosqichning text maydoni to‘liq gap — nima qilinadi va natija nima.`,

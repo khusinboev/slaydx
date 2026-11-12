@@ -1,5 +1,5 @@
 import type { SlideThemeId, SlideModel } from "./slide-types";
-import type { SlideTemplateId } from "./slide-templates";
+import type { SlideTemplateId, SlideVisual } from "./slide-templates";
 import type { AcademicDoc, DocMeta } from "./types";
 import { safeSlice } from "./safe-text";
 
@@ -14,6 +14,12 @@ import { safeSlice } from "./safe-text";
 export type LiveStage = "plan" | "research" | "text" | "images" | "assembly" | "done";
 
 /**
+ * Sub-step of the plain-deck picture stage (docs/slide-quality/SPEC.md §B): searching stock, the vision judge
+ * picking, the AI drawing. Without it the bar sat on «Rasmlar · 0/6» for the whole query + judge time.
+ */
+export type ImagePhase = "search" | "pick" | "draw";
+
+/**
  * Hodisalar INDEKS asosida, hammasi NUSXA (mutatsiya emas).
  *
  * `attachSlideImages` joyida mutatsiya qiladi, `title-fix`/`end-fix`
@@ -21,8 +27,8 @@ export type LiveStage = "plan" | "research" | "text" | "images" | "assembly" | "
  * barqaror ko'rsatkich, `id` emas.
  */
 export type SlideProgressEvent =
-  | { type: "plan"; slides: SlideModel[]; roles: string[]; meta: DocMeta; theme: SlideThemeId; template: SlideTemplateId; logo?: string }
-  | { type: "stage"; stage: LiveStage }
+  | { type: "plan"; slides: SlideModel[]; roles: string[]; meta: DocMeta; theme: SlideThemeId; template: SlideTemplateId; visual?: SlideVisual; logo?: string }
+  | { type: "stage"; stage: LiveStage; phase?: ImagePhase }
   | { type: "research"; sources: number }
   | { type: "slide"; index: number; slide: SlideModel }
   | { type: "deck"; slides: SlideModel[] }
@@ -42,6 +48,8 @@ export type LiveDeck = {
   meta: DocMeta;
   theme: SlideThemeId;
   template: SlideTemplateId;
+  /** The deck's design (auto may give a content template another visual) — the live view draws with it. */
+  visual?: SlideVisual;
   logo?: string;
   roles: string[];
   slides: SlideModel[];
@@ -52,6 +60,8 @@ export type LiveDeck = {
   /** Rasm kutilayotgan slaydlar indekslari. */
   imageWait: number[];
   images: { got: number; want: number };
+  /** Current picture sub-step (plain decks); absent on other stages and on old events. */
+  imagePhase?: ImagePhase;
   research?: { sources: number };
 };
 
@@ -78,6 +88,7 @@ export function applyLiveEvent(state: LiveDeck | undefined, ev: SlideProgressEve
         meta: ev.meta,
         theme: ev.theme,
         template: ev.template,
+        ...(ev.visual ? { visual: ev.visual } : {}),
         logo: ev.logo,
         roles: [...ev.roles],
         slides: ev.slides.map(cloneSlide),
@@ -91,7 +102,8 @@ export function applyLiveEvent(state: LiveDeck | undefined, ev: SlideProgressEve
     }
     case "stage": {
       if (!state) throw new Error("slide-progress: plan hodisasidan oldin stage kelmasligi kerak");
-      next = { ...state, stage: ev.stage };
+      next = { ...state, stage: ev.stage, imagePhase: ev.stage === "images" ? ev.phase : undefined };
+      if (!next.imagePhase) delete next.imagePhase;
       break;
     }
     case "research": {
@@ -178,7 +190,9 @@ export function liveProgress(s: LiveDeck): number {
     case "images": {
       const want = Math.max(1, s.images.want);
       const frac = Math.min(1, s.images.got / want);
-      return Math.round(60 + frac * 32);
+      // The sub-steps move the bar a little before the first picture lands (search 61, pick 64, draw 66).
+      const floor = s.imagePhase === "draw" ? 66 : s.imagePhase === "pick" ? 64 : s.imagePhase === "search" ? 61 : 60;
+      return Math.max(floor, Math.round(60 + frac * 32));
     }
     case "assembly":
       return 95;
@@ -208,7 +222,14 @@ export function liveStep(s: LiveDeck): string {
       text = `Matn yozilmoqda · ${s.written.length}/${total} slayd`;
       break;
     case "images":
-      text = `Rasmlar · ${s.images.got}/${s.images.want}`;
+      text =
+        s.imagePhase === "search"
+          ? `Rasmlar izlanmoqda · ${s.images.got}/${s.images.want}`
+          : s.imagePhase === "pick"
+            ? `Rasmlar tanlanmoqda · ${s.images.got}/${s.images.want}`
+            : s.imagePhase === "draw"
+              ? `Rasmlar chizilmoqda · ${s.images.got}/${s.images.want}`
+              : `Rasmlar · ${s.images.got}/${s.images.want}`;
       break;
     case "assembly":
       text = "Yig'ilmoqda…";
@@ -237,6 +258,7 @@ export function liveDocOf(s: LiveDeck): AcademicDoc {
     slides: s.slides.map(cloneSlide),
     slideTheme: s.theme,
     slideTemplate: s.template,
+    ...(s.visual ? { slideVisual: s.visual } : {}),
     slideLogo: s.logo ? { url: s.logo } : undefined,
   };
 }

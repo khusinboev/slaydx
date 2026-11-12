@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { SLIDE_TEMPLATES, SLIDE_TEMPLATE_BY_ID, normalizeTemplateId, type SlideTemplate, type SlideTemplateId } from "@/lib/generation/slide-templates";
 import { SLIDE_THEMES, getSlideTheme } from "@/lib/generation/slide-themes";
+import { AUTO_THEME, type SlideThemeChoice } from "@/lib/generation/slide-design";
 import { bodyRules } from "@/lib/generation/slide-audience";
 import { GALLERY_SLIDES, sampleDeck } from "@/lib/generation/slide-samples";
 import type { SlideModel, SlideTheme, SlideThemeId } from "@/lib/generation/slide-types";
@@ -39,11 +40,22 @@ import { CustomTemplateCard, CustomPreview } from "./CustomTemplateCard";
  * `ColorDots` `background`ni to'g'ridan-to'g'ri `style`ga qo'yadi, shuning
  * uchun gradient ham oddiy hex kabi ishlaydi, ikki tonli doira saqlanadi.
  */
-const THEME_COLOR_OPTIONS = SLIDE_THEMES.map((t) => ({
-  id: t.id,
-  hex: `linear-gradient(90deg, ${t.titleBg} 50%, ${t.accent} 50%)`,
-  label: t.nameUz,
-}));
+const THEME_COLOR_OPTIONS = [
+  /*
+   * «Avtomatik» (standart, docs/slide-quality/SPEC.md §A): the engine picks a palette that fits the chosen design
+   * and the topic (`slide-design.ts`). A rainbow dot — it is not one palette.
+   */
+  {
+    id: AUTO_THEME,
+    hex: "conic-gradient(#0B1F3A, #0F766E, #15803D, #EA580C, #DB2777, #8B5CF6, #0B1F3A)",
+    label: "Avtomatik — mavzu va dizaynga mos rang",
+  },
+  ...SLIDE_THEMES.map((t) => ({
+    id: t.id,
+    hex: `linear-gradient(90deg, ${t.titleBg} 50%, ${t.accent} 50%)`,
+    label: t.nameUz,
+  })),
+];
 
 export function TemplateGallery({
   value,
@@ -51,11 +63,14 @@ export function TemplateGallery({
   onChange,
   onTheme,
   custom,
+  allowAutoTheme = false,
 }: {
   value: string;
   theme: string;
+  /** Show the «Avtomatik» palette dot (plain «Slayd» only). */
+  allowAutoTheme?: boolean;
   onChange: (templateId: SlideTemplateId) => void;
-  onTheme: (themeId: SlideThemeId) => void;
+  onTheme: (themeId: SlideThemeChoice) => void;
   /**
    * «O'z shablonim» (faqat pro): `value` — `templateAssetId`. Berilmasa
    * karta chiqmaydi (oddiy slayd). Tanlanganda ichki shablon/rang
@@ -64,7 +79,9 @@ export function TemplateGallery({
   custom?: { value: string; onChange: (assetId: string) => void };
 }) {
   const current = normalizeTemplateId(value);
-  const themeObj = getSlideTheme(theme as SlideThemeId);
+  const autoTheme = allowAutoTheme && theme === AUTO_THEME;
+  // Previews need real colours: with «Avtomatik» the chosen template is shown in its own default palette.
+  const themeObj = getSlideTheme(autoTheme ? SLIDE_TEMPLATE_BY_ID[current].defaultTheme : (theme as SlideThemeId));
   const customOn = Boolean(custom?.value);
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -113,8 +130,15 @@ export function TemplateGallery({
             <span className="text-muted-foreground text-[13.5px]">Namunaning o‘z ranglari</span>
           </Row>
         ) : (
-          <Row label="Rang" hint="Palitra — tanlangan shablonning barcha slaydlariga; preview ham shu rangda.">
-            <ColorDots ariaLabel="Rang" options={THEME_COLOR_OPTIONS} value={themeObj.id} onChange={(id) => onTheme(id as SlideThemeId)} />
+          <Row
+            label="Rang"
+            hint={
+              autoTheme
+                ? "Avtomatik: dizaynga va mavzuga mos palitra tanlanadi. Aniq rang kerak bo'lsa — doirani bosing."
+                : "Palitra — tanlangan shablonning barcha slaydlariga; preview ham shu rangda."
+            }
+          >
+            <ColorDots ariaLabel="Rang" options={allowAutoTheme ? THEME_COLOR_OPTIONS : THEME_COLOR_OPTIONS.slice(1)} value={autoTheme ? AUTO_THEME : themeObj.id} onChange={(id) => onTheme(id as SlideThemeChoice)} />
           </Row>
         )}
       </div>

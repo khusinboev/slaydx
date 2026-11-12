@@ -11,6 +11,7 @@ import { researchLines } from "./slide-prompt/research";
 import type { SlideTemplate, SlideVisual } from "./slide-templates";
 import type { SlideLayout, SlideModel, SlideStep } from "./slide-types";
 import type { DocMeta } from "./types";
+import { isOfficialese, slideVoice, voiceLines } from "./slide-voice";
 
 /**
  * Matn ZICHLIGI — «yupqa slayd» detektori va bitta chaqiruvli ta'mir
@@ -564,7 +565,7 @@ export function wordTargetLines(rules: BodyRules, visual?: SlideVisual): string[
  * iqtibos («Orol nega qurib qoldi?») ham qisqa bo'lishi tabiiy.
  * `QUOTE_MIN_WORDS` faqat prompt poli.
  */
-export type ThinReason = "few-bullets" | "short-bullets" | "short-steps" | "empty-subtitle" | "clipped-option" | "short-columns" | "clipped-text";
+export type ThinReason = "few-bullets" | "short-bullets" | "short-steps" | "empty-subtitle" | "clipped-option" | "short-columns" | "clipped-text" | "officialese";
 
 function words(s: string | undefined): number {
   return String(s ?? "").trim().split(/\s+/).filter(Boolean).length;
@@ -1001,6 +1002,15 @@ function mergeBody(orig: SlideModel, raw: Record<string, unknown>, rules: BodyRu
       const subtitle = clipTo(String(raw.subtitle ?? ""), clipLimit("subtitleSection", rules, visual, undefined, undefined, NO_IMAGE));
       return subtitle ? { ...orig, subtitle } : null;
     }
+    // Only the officialese reason reaches these (they are never thin): the subtitle is rewritten, nothing else.
+    case "closing": {
+      const subtitle = clipTo(String(raw.subtitle ?? ""), clipLimit("subtitleClosing", rules, visual, undefined, undefined, NO_IMAGE));
+      return subtitle ? { ...orig, subtitle } : null;
+    }
+    case "title": {
+      const subtitle = clipTo(String(raw.subtitle ?? ""), SLIDE_LIMITS.subtitle);
+      return subtitle ? { ...orig, subtitle } : null;
+    }
     case "quiz": {
       /*
        * Test — eng xavfli ta'mir: javob kaliti buzilmasin.
@@ -1064,10 +1074,14 @@ const REASON_TEXT: Record<
     `bosqich matni qisqa — ${t.maxSteps > PROCESS_MIN_STEPS ? `${PROCESS_MIN_STEPS}–${t.maxSteps}` : PROCESS_MIN_STEPS} bosqich; text: ${Object.entries(t.stepTextBy)
       .map(([n, r]) => `${n} bosqichda ${fmtRange(r)}`)
       .join(", ")} so‘z — nima qilinadi va natija nima`,
-  "empty-subtitle": (t) => `subtitle bo‘sh — ${fmtRange(t.sectionSubtitle)} so‘zlik kirish: bu bo‘limda nima ko‘riladi`,
+  "empty-subtitle": (t) => `subtitle bo‘sh — ${fmtRange(t.sectionSubtitle)} so‘zlik kirish: tinglovchi shu qismda nimani bilib oladi`,
   "clipped-option": (t) =>
     `variant kesilgan yoki qutiga sig‘maydi — faqat shu variantni ≤ ${t.quizOptionMax} so‘z qilib, ASL MATNNING BOSHINI saqlab to‘ldiring/qisqartiring; qolgan variantlar, tartib va answer o‘zgarmasin`,
   "short-columns": (t) => `ustunlar yupqa — har ustunda ${fmtRange({ min: Math.min(3, t.maxColItems), max: t.maxColItems })} band, har band ${fmtRange(t.colItem)} so‘z`,
+  officialese: (_t, _r, s) =>
+    s.layout === "section" || s.layout === "title" || s.layout === "closing"
+      ? `subtitle idoraviy («Ushbu bo‘limda…», «…ko‘rib chiqiladi», «…tahlili») — uni tinglovchiga qaratilgan bitta aniq gap yoki savol qilib qayta yozing, o‘sha uzunlikda, yangi fakt qo‘shmang`
+      : `idoraviy uslub («amalga oshiriladi», «muhim ahamiyat kasb etadi», «hisoblanadi»…) — shu fikrlarni talaba tilida, qisqa faol gaplar va aniq misol bilan qayta yozing; o‘sha uzunlikda, yangi fakt qo‘shmang`,
   "clipped-text": (_t, r, s, visual, reasons) => {
     const caps = clippedFields(s, r, visual)
       .map((f) => `${{ title: "title", bullets: "har band", colItem: "har ustun bandi", stepText: "har bosqich text" }[f.field]} ≤ ${f.words} so‘z va ≤ ${Math.floor(PROMPT_HEADROOM * f.cap)} belgi`)
@@ -1085,6 +1099,8 @@ const FIELDS: Partial<Record<SlideModel["layout"], string>> = {
   twoCol: `"left":[""],"right":[""]`,
   compare: `"left":[""],"right":[""]`,
   section: `"subtitle":""`,
+  title: `"subtitle":""`,
+  closing: `"subtitle":""`,
   quiz: `"quiz":[{"q":"","options":["","","",""],"answer":0}]`,
 };
 
@@ -1147,7 +1163,21 @@ export async function repairThinSlides(
      * uni o'tkazib yuboradi va boshqa qoida unga tegmaydi — alohida filtr
      * o'lik kod edi (P14c sharhi N6). `repairedTitle` qo'riqchisi qoladi.
      */
-    const thin = thinSlides(out, rules, visual).slice(0, REPAIR_MAX_SLIDES);
+    /*
+     * Officialese (docs/slide-quality/SPEC.md §C) rides the SAME call: student-voice decks only, after the thin
+     * slides (they have priority within `REPAIR_MAX_SLIDES`). A slide already thin gets the voice reason added.
+     */
+    const student = slideVoice(meta.slideAudience, tpl.id) === "student";
+    const thin = thinSlides(out, rules, visual);
+    if (student) {
+      out.forEach((s, index) => {
+        if (!isOfficialese(s)) return;
+        const hit = thin.find((x) => x.index === index);
+        if (hit) hit.reasons.push("officialese");
+        else thin.push({ index, reasons: ["officialese"] });
+      });
+    }
+    thin.splice(REPAIR_MAX_SLIDES);
     if (!thin.length) return out;
     const left = remainingMs(deadline);
     if (left < REPAIR_MIN_MS) return out;
@@ -1171,6 +1201,7 @@ export async function repairThinSlides(
         thin.some(({ reasons }) => !clippedOnly(reasons))
           ? `YUPQA slaydda ko‘rsatilgan maydonlarni to‘liq qayta yozing — mavjud fikrni chuqurlashtiring: ta’rif, sabab, misol, oqibat.`
           : "",
+        student ? voiceLines("student").slice(1, 4).join(" ") : "",
         `KESILGAN («…») maydonni FAQAT qisqartiring — ma’no saqlansin, yangi fikr qo‘shmang.`,
         // N1: son/tartib qulfi faqat FAQAT kesilgan slayd bo'lsa — yupqa slayd ro'yxatni butunlay qayta yozadi.
         thin.some(({ reasons }) => clippedOnly(reasons))
@@ -1226,8 +1257,9 @@ export async function repairThinSlides(
       if (!reasons) continue;
       wanted.delete(index);
       const merged = mergeRepair(out[index], o, reasons, rules, visual);
-      // Faqat YAXSHILANGAN javob: slayd endi yupqa emas.
-      const still = merged ? thinReasons(merged, rules, visual) : [];
+      // Faqat YAXSHILANGAN javob: slayd endi yupqa emas (va idoraviy uslub so'ralgan bo'lsa — endi idoraviy emas).
+      const still: ThinReason[] = merged ? thinReasons(merged, rules, visual) : [];
+      if (merged && reasons.includes("officialese") && isOfficialese(merged)) still.push("officialese");
       if (merged && !still.length) {
         out[index] = merged;
         accepted += 1;

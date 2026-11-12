@@ -9,7 +9,7 @@
  * kalit QUERY parametrida (sarlavhada emas — Pixabay shunday talab
  * qiladi). Javob: `hits[].largeImageURL`.
  */
-import { photoOrientation, requestBudget, type ImageFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
+import { photoOrientation, requestBudget, type ImageFailure, type ImageAsk, type ImageProvider, type ImageResult, type StockSearch } from "./image-provider";
 import { getProviderKey } from "../server/providers/resolve";
 import { recordProviderCall } from "./provider-calls";
 
@@ -39,9 +39,10 @@ function pixabayOrientation(size: { width: number; height: number }): "horizonta
   return photoOrientation(size) === "portrait" ? "vertical" : "horizontal";
 }
 
-type PixabayHit = { largeImageURL?: string; tags?: string };
+type PixabayHit = { largeImageURL?: string; previewURL?: string; webformatURL?: string; tags?: string };
 
-export async function requestPixabayImage(ask: ImageAsk, deadline?: number): Promise<ImageResult> {
+/** Pixabay search -> candidates (docs/slide-quality/SPEC.md §B); `requestPixabayImage` is built on it. */
+export async function searchPixabay(ask: Pick<ImageAsk, "searchQuery" | "size">, deadline?: number, perPage = 5): Promise<StockSearch> {
   const key = pixabayKey();
   if (!key) return { ok: false, reason: "no-key", detail: "PIXABAY_API_KEY yo'q" };
 
@@ -56,9 +57,10 @@ export async function requestPixabayImage(ask: ImageAsk, deadline?: number): Pro
   // Usage counter for the admin «Provayderlar» page: one count per request that actually went out.
   let sent = false;
   try {
+    // Pixabay rejects per_page < 3.
     const url =
       `${PIXABAY_URL}?key=${encodeURIComponent(key)}&q=${encodeURIComponent(query)}` +
-      `&image_type=photo&orientation=${pixabayOrientation(ask.size)}&per_page=5&safesearch=true`;
+      `&image_type=photo&orientation=${pixabayOrientation(ask.size)}&per_page=${Math.max(3, perPage)}&safesearch=true`;
     const res = await fetch(url, { signal: AbortSignal.timeout(budget) });
     sent = true;
     recordProviderCall("pixabay", res.ok);
@@ -71,11 +73,13 @@ export async function requestPixabayImage(ask: ImageAsk, deadline?: number): Pro
     }
     const data = (await res.json()) as { hits?: PixabayHit[] };
     const hits = Array.isArray(data.hits) ? data.hits : [];
-    const usable = hits.map((h) => h.largeImageURL).filter((u): u is string => Boolean(u));
-    if (!usable.length) return { ok: false, reason: "failed", detail: "natija yo'q" };
-    const picked = usable.find((u) => !ask.seen?.has(u)) ?? usable[0];
-    const alt = hits.find((h) => h.largeImageURL === picked)?.tags || query;
-    return { ok: true, image: { url: picked, alt } };
+    const candidates = hits
+      .map((h) =>
+        h.largeImageURL ? { url: h.largeImageURL, thumb: h.previewURL || h.webformatURL || h.largeImageURL, alt: h.tags || query, provider: "pixabay" as const } : null,
+      )
+      .filter((c): c is NonNullable<typeof c> => c !== null)
+      .slice(0, perPage);
+    return { ok: true, candidates };
   } catch (e) {
     if (!sent) recordProviderCall("pixabay", false);
     const msg = e instanceof Error ? e.message : "network";
@@ -83,6 +87,15 @@ export async function requestPixabayImage(ask: ImageAsk, deadline?: number): Pro
     const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
     return { ok: false, reason: timedOut ? "timeout" : "failed", detail: msg };
   }
+}
+
+export async function requestPixabayImage(ask: ImageAsk, deadline?: number): Promise<ImageResult> {
+  const found = await searchPixabay(ask, deadline);
+  if (!found.ok) return found;
+  const usable = found.candidates;
+  if (!usable.length) return { ok: false, reason: "failed", detail: "natija yo'q" };
+  const picked = usable.find((c) => !ask.seen?.has(c.url)) ?? usable[0];
+  return { ok: true, image: { url: picked.url, alt: picked.alt } };
 }
 
 export const pixabayProvider: ImageProvider = {

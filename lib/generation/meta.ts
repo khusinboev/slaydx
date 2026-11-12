@@ -32,7 +32,7 @@ import { isResumeLanguage } from "./resume-params";
 import { isResumePaletteId, isResumeTemplateId } from "./resume/templates";
 import { isSlidePurpose, purposeDefaults } from "./slide-purpose";
 import { normalizeTemplateId } from "./slide-templates";
-import { isSlideThemeId } from "./slide-types";
+import { AUTO_THEME, isSlideThemeChoice } from "./slide-design";
 import type { DocMeta } from "./types";
 
 function s(v: FormValues, key: string, fallback = "") {
@@ -160,7 +160,10 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
       ? clampInt(values.slideCount, PRO_SLIDE_MIN, PRO_SLIDE_MAX, defaultSlideCount("pro-slide"))
       : clampInt(values.slideCount, SLIDE_MIN, SLIDE_MAX, defaultSlideCount("slide"));
   const authorParts = parseAuthorLine(s(values, "author", s(values, "fullName")));
-  const themeRaw = s(values, "slideTheme", "atlas");
+  // Untouched form / API without the field = «auto» (docs/slide-quality/SPEC.md §A): the engine picks the palette.
+  // «auto» is a PLAIN-slide value (review M2): pro slayd keeps main's rule — absent/unknown/«auto» → atlas.
+  const themeDefault = tool.id === "slide" ? AUTO_THEME : "atlas";
+  const themeRaw = s(values, "slideTheme", themeDefault);
   const templateRaw = s(values, "slideTemplate", "auto");
   const purposeRaw = s(values, "slidePurpose", "general");
   const slidePurpose = isSlidePurpose(purposeRaw) ? purposeRaw : "general";
@@ -256,7 +259,7 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     kind: s(values, "kind", "standard"),
     pagesLabel: tool.id === "slide" || tool.id === "pro-slide" ? String(slidePages) : pagesLabel,
     targetPages: tool.id === "slide" || tool.id === "pro-slide" ? slidePages : parsePages(pagesLabel, fallbackPages),
-    slideTheme: isSlideThemeId(themeRaw) ? themeRaw : "atlas",
+    slideTheme: isSlideThemeChoice(themeRaw) && (tool.id === "slide" || themeRaw !== AUTO_THEME) ? themeRaw : themeDefault,
     // Eski (olib tashlangan) id ham qabul qilinadi: `normalizeTemplateId`
     // uni o‘rnini bosgan shablonga yo‘naltiradi, «auto» ga tashlamaydi.
     slideTemplate: normalizeTemplateId(templateRaw),
