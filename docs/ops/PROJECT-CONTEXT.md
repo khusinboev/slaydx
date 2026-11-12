@@ -77,6 +77,10 @@ Prices: one place, `priceFor` (server); admin «Narxlar» page adjusts 25–1000
   (needs the OpenAI key), fal: FLUX 3, Seedream 5 Lite/Pro, Ideogram 4.5, Recraft 4.1/Pro. Price = live upstream cost × `media.markup` (2), up to
   100 so'm, then `tool_pricing` %; per-model enable / markup override in admin «Narxlar» → «Media modellari» (migration 066). Old «Rasm» keeps its
   ladder until P8. ElevenLabs Creator plan, Kling trial and fal $10 bought 2026-11-01/02.
+- **ElevenLabs direct = `eleven_v4`** (2026-11-12, `fix/elevenlabs-v4-uzbek`): `eleven_v3` refuses `language_code: "uz"` (400 `unsupported_language`,
+  measured live), so Studio «Ovoz» TTS/dialogue, clone previews and the podcast/greeting «Premium ovoz» send `eleven_v4`; catalog ids
+  `elevenlabs/eleven-v3` / `v3-dialogue` are kept (persisted), label «ElevenLabs v4»; a 400 `unsupported_language` is retried once without the code.
+  14 native Uzbek voice-library voices (all male, default Davronbek) are listed first; the voice changer and fal keep the premade voices only.
 
 ## 6. Bot, Mini App, sessions
 - Bot = same services as the web (no business logic of its own). Admin panel inside the bot is a **reply keyboard**: Statistika, Xabar yuborish,

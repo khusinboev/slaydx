@@ -16,7 +16,7 @@ import { chunkText, TTS_LIMITS } from "../tts/types";
 import { mergeToMp3, mp3Seconds } from "../tts/mp3";
 import { geminiTtsModel } from "../tts/gemini";
 import { extractMeta } from "../meta";
-import { STUDIO_SPEECH_PURPOSE, cloneIdOf, libraryVoicesOf, voiceParamsOf } from "../../media/catalog-speech";
+import { ELEVENLABS_DIRECT_MAX_CHARS, STUDIO_SPEECH_PURPOSE, cloneIdOf, libraryVoicesOf, voiceParamsOf } from "../../media/catalog-speech";
 import { parseDialogue, speechTextParam, spokenOverLimit, studioSpeechEntry } from "../../media/studio-speech";
 import { studioSpeechAdapters } from "../../media/adapters/speech-studio";
 import { UserFacingError } from "../../server/user-error";
@@ -43,7 +43,7 @@ const FAILED = "Ovoz yaratilmadi — provayder javob bermadi. Pul balansingizga 
 
 /** Largest text of one provider call for this model. */
 export function speechChunkLimit(entry: Pick<CatalogEntry, "id">): number {
-  return entry.id.startsWith("google/") ? TTS_LIMITS.geminiChunkChars : 5_000;
+  return entry.id.startsWith("google/") ? TTS_LIMITS.geminiChunkChars : ELEVENLABS_DIRECT_MAX_CHARS;
 }
 
 type Voice = { id: string; label: string };

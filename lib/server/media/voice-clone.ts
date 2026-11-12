@@ -25,6 +25,7 @@ import { runMedia, type RunInput } from "./run";
  */
 
 export const CLONE_MODEL_ID = "elevenlabs/voice-clone";
+/** The direct ElevenLabs TTS entry (its id is kept for persisted rows; it runs `eleven_v4`, `catalog-speech.ts` header). */
 export const CLONE_PREVIEW_MODEL_ID = "elevenlabs/eleven-v3";
 
 export type CloneDeps = ProviderDeleteDeps & {

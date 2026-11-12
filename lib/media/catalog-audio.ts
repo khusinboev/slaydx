@@ -34,7 +34,7 @@
  */
 import type { CatalogEntry, ParamSchema, PurposeSpec } from "../studio-core";
 import { ELEVENLABS_CREATOR_USD_PER_CREDIT } from "../generation/llm-pricing";
-import { ELEVENLABS_VOICES } from "./catalog-speech";
+import { ELEVENLABS_STS_VOICES } from "./catalog-speech";
 
 export const STUDIO_MUSIC_PURPOSE = "studio.music";
 export const STUDIO_SFX_PURPOSE = "studio.sfx";
@@ -226,7 +226,7 @@ export const STUDIO_AUDIO_ENTRIES: readonly CatalogEntry[] = [
     params: [
       inputParam,
       inputSecondsParam,
-      { name: "voice", label: "Yangi ovoz", type: "voice", source: "user-clones", default: ELEVENLABS_VOICES[0]!.id, affects: "request" },
+      { name: "voice", label: "Yangi ovoz", type: "voice", source: "user-clones", default: ELEVENLABS_STS_VOICES[0]!.id, affects: "request" },
       { name: "removeNoise", label: "Fon shovqinini olib tashlash", type: "bool", default: false, affects: "request" },
     ],
     cost: { per: "second", usd: usdPerSecond(AUDIO_INPUT_CREDITS_PER_SECOND), secondsParam: "inputSeconds" },

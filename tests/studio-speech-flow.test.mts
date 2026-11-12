@@ -9,7 +9,7 @@ import { inRequest } from "./helpers/next-request.mts";
  * stubbed `fetch` (no network, no paid call).
  *
  *   gating     `studio.voice.enabled` off → 400 before charging; on → the catalog lists the speech models;
- *   speech     route → charge = shown price → claimNext → runJob: ONE ElevenLabs TTS call (eleven_v3, the chosen voice),
+ *   speech     route → charge = shown price → claimNext → runJob: ONE ElevenLabs TTS call (eleven_v4, the chosen voice),
  *              MP3 stored, `media_jobs` row `studio.speech`, gallery `kind: "audio"`; a provider 500 → FAILED, full refund;
  *   ownership  another user's clone in a speech request → 400 `voice_missing` BEFORE the charge;
  *   samples    consent required (400), sniffed type (415), measured length (422), the consent fields stored;
@@ -188,7 +188,7 @@ const wav = (seconds: number) => encodeWav(new Float32Array(24_000 * seconds).ma
 
 /* P7c: what a finished job left for the admin cost reports. */
 const usd6 = (n: number) => Number(n.toFixed(6));
-/** ElevenLabs eleven_v3 on the owner's Creator plan: 1 credit per character, $22 / 121 000 credits. */
+/** ElevenLabs (eleven_v4) on the owner's Creator plan: 1 credit per character (kept conservative), $22 / 121 000 credits. */
 const EL_USD_PER_CHAR = 22 / 121_000;
 type Part = { kind: string; provider: string; model: string; calls: number; inputTokens: number; outputTokens: number; units: number; usd: number };
 /**
@@ -248,7 +248,7 @@ test("gating + speech: charge → one ElevenLabs call → MP3 + media_jobs row +
   const tts = calls.filter((c) => c.url.includes("/text-to-speech/"));
   assert.equal(tts.length, 1);
   assert.equal(tts[0]!.url, `https://api.elevenlabs.io/v1/text-to-speech/${RACHEL}?output_format=mp3_44100_128`);
-  assert.deepEqual(tts[0]!.body, { text: values.text, model_id: "eleven_v3", language_code: "uz", voice_settings: { stability: 0, speed: 1.1 } });
+  assert.deepEqual(tts[0]!.body, { text: values.text, model_id: "eleven_v4", language_code: "uz", voice_settings: { stability: 0, speed: 1.1 } });
   const file = (await query<{ mime: string }>("SELECT mime FROM generation_files WHERE generation_id = $1", [r.body.id]))[0];
   assert.equal(file?.mime, "audio/mpeg");
   assert.equal(gen?.doc?.speech?.model, "elevenlabs/eleven-v3");
@@ -269,7 +269,7 @@ test("gating + speech: charge → one ElevenLabs call → MP3 + media_jobs row +
   const want = usd6(chars * EL_USD_PER_CHAR);
   assert.ok(want > 0);
   const c = await costOf(r.body.id!);
-  assert.deepEqual(c.cj?.parts, [{ kind: "tts", provider: "elevenlabs", model: "eleven_v3", calls: 1, inputTokens: 0, outputTokens: 0, units: chars, usd: want }]);
+  assert.deepEqual(c.cj?.parts, [{ kind: "tts", provider: "elevenlabs", model: "eleven_v4", calls: 1, inputTokens: 0, outputTokens: 0, units: chars, usd: want }]);
   assert.equal(c.cj?.usd, want);
   assert.equal(c.cj?.calls, 1);
   assert.equal(c.spend?.usd, want, "the admin cost report sees it");
@@ -312,7 +312,7 @@ test("P7c dialogue: ONE call priced on the whole script; the admin tool / kind t
   assert.equal(gen?.status, "COMPLETED", String(gen?.error));
   const want = usd6(23 * EL_USD_PER_CHAR);
   const c = await costOf(r.body.id!);
-  assert.deepEqual(c.cj?.parts, [{ kind: "tts", provider: "elevenlabs", model: "eleven_v3", calls: 1, inputTokens: 0, outputTokens: 0, units: 11, usd: want }]);
+  assert.deepEqual(c.cj?.parts, [{ kind: "tts", provider: "elevenlabs", model: "eleven_v4", calls: 1, inputTokens: 0, outputTokens: 0, units: 11, usd: want }]);
   assert.equal(c.spend?.usd, want);
   assert.ok(Math.abs(c.mediaJobsUsd - want) < 1e-6);
   const after = await reportOf("studio-speech", "tts");
@@ -399,7 +399,7 @@ test("clone: slots, success, one active, speak with it, ownership, delete, new c
   const { VOICE_PREVIEW_TEXT } = await import("../lib/media/catalog-speech.ts");
   const previewUsd = usd6(VOICE_PREVIEW_TEXT.length * EL_USD_PER_CHAR);
   const cc = await costOf(r.body.id!);
-  assert.deepEqual(cc.cj?.parts, [{ kind: "tts", provider: "elevenlabs", model: "eleven_v3", calls: 1, inputTokens: 0, outputTokens: 0, units: VOICE_PREVIEW_TEXT.length, usd: previewUsd }]);
+  assert.deepEqual(cc.cj?.parts, [{ kind: "tts", provider: "elevenlabs", model: "eleven_v4", calls: 1, inputTokens: 0, outputTokens: 0, units: VOICE_PREVIEW_TEXT.length, usd: previewUsd }]);
   assert.equal(cc.spend?.usd, previewUsd, "the admin cost report sees the preview");
   assert.ok(Math.abs(cc.mediaJobsUsd - previewUsd) < 1e-6, "the free IVC row adds nothing to the preview's cost_usd");
 
@@ -514,6 +514,21 @@ test("preview: a library voice costs one provider call, then the cache serves it
   assert.equal(calls.filter((c) => c.url.includes("/text-to-speech/")).length, 1, "the second play is served from the cache");
   assert.equal((await preview(me, "elevenlabs:NotInTheLibrary1")).status, 404, "only catalog voices");
   assert.equal((await preview(me, "gemini:Kore")).status, 503, "Gemini not offered without TTS_GEMINI_MODEL");
+
+  // A native Uzbek library voice (Davronbek): one eleven_v4 + `uz` call with that voice, cached under `elevenlabs:<id>`.
+  const DAVRONBEK = "agoC45V78njTIxYzwmSb";
+  const { query } = await db();
+  const { VOICE_PREVIEW_TEXT } = await import("../lib/media/catalog-speech.ts");
+  calls.length = 0;
+  const u1 = await preview(me, `elevenlabs:${DAVRONBEK}`);
+  assert.equal(u1.status, 200, "MUTATSIYA: preview oq ro'yxati o'zbek ovozini bilmasa 404");
+  const sent = calls.filter((c) => c.url.includes("/text-to-speech/"));
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0]!.url, `https://api.elevenlabs.io/v1/text-to-speech/${DAVRONBEK}?output_format=mp3_44100_128`);
+  assert.deepEqual(sent[0]!.body, { text: VOICE_PREVIEW_TEXT, model_id: "eleven_v4", language_code: "uz", voice_settings: { stability: 0.5 } });
+  assert.equal((await query("SELECT 1 FROM studio_voice_previews WHERE voice_key = $1", [`elevenlabs:${DAVRONBEK}`])).length, 1, "the cache key names the voice only");
+  assert.equal((await preview(me, `elevenlabs:${DAVRONBEK}`)).status, 200);
+  assert.equal(calls.filter((c) => c.url.includes("/text-to-speech/")).length, 1, "then served from the cache");
 });
 
 /* ───────────────────────── review fixes (M1, m1, m2, m3, NITs) ───────────────────────── */

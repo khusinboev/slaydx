@@ -306,6 +306,8 @@ test("refusals: studioAudioError says why BEFORE charging", () => {
   assert.match(String(e({ ...BASE[STS], inputSeconds: 2 })), /3–300/);
   assert.match(String(e({ ...BASE[STS], inputSeconds: 301 })), /3–300/);
   assert.match(String(e({ ...BASE[STS], voice: "Kore" })), /Noma'lum ovoz/);
+  // The native Uzbek library voices are untested with speech-to-speech (only TTS / dialogue were, 2026-11-12): refused.
+  assert.match(String(e({ ...BASE[STS], voice: "agoC45V78njTIxYzwmSb" })), /Noma'lum ovoz/);
   assert.match(String(e({ ...BASE[STS], voice: "clone:not-a-uuid" })), /topilmadi/);
   assert.equal(e({ ...BASE[STS], voice: `clone:${CLONE_ID}` }), null, "a well-formed clone reference (ownership is the server's SQL check)");
   // The route's preflight is this function.

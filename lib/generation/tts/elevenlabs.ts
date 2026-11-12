@@ -12,14 +12,22 @@
  *   body is the audio itself (`audio/mpeg`).
  *   Reference: https://elevenlabs.io/docs/api-reference/text-to-speech/convert
  *   - `output_format` default is `mp3_44100_128`; `model_id` default is `eleven_multilingual_v2`.
- *   - Models: https://elevenlabs.io/docs/overview/models -- only `eleven_v3` (70+ languages, 5 000 chars per
- *     request) lists Uzbek (`uz`); `eleven_multilingual_v2` (29) and `eleven_flash_v2_5` (32) do not. The
- *     product's main language is Uzbek, so the model is `eleven_v3`. Our chunks are <= 900 chars, far under 5 000.
+ *   - Model (re-checked LIVE on production 2026-11-12, `GET /v1/models` + real calls): `eleven_v4` (10 000 chars per
+ *     request, cost multiplier 1, 94 languages incl. `uz`) is the model. `eleven_v3` (5 000 chars, 74 languages) does
+ *     NOT list `uz` any more: `model_id: eleven_v3, language_code: "uz"` answers 400 `{"detail":{"code":
+ *     "invalid_parameters","message":"Model 'eleven_v3' does not support language_code 'uz'.","status":
+ *     "unsupported_language"}}` (text-to-speech AND text-to-dialogue) — every v3 + `uz` call failed, so did the only
+ *     direct Studio v3 job (2026-11-06). `eleven_v4` + `uz`: single voice and dialogue 200 OK, `voice_settings
+ *     {speed, stability}` accepted. `eleven_multilingual_v2` (29) and `eleven_flash_v2_5` (32) do not list Uzbek.
+ *     Our chunks are <= 900 chars, far under 10 000.
+ *   - A 400 `unsupported_language` (a model that drops a language later) is retried ONCE without `language_code`
+ *     (the model then detects the language itself; v3 without `language_code` still answered 200 on 2026-11-12).
  *   - `voice_settings.speed` is documented on the convert page; it is sent only when the form asks for a non-1 pace.
  *   - Errors: 422 carries `detail: [{loc, msg, type}]`; auth/quota/policy errors carry `detail: {status, message}`.
  *
- * Price: $0.08 per 1 000 characters for v3 / Multilingual v2 (https://elevenlabs.io/pricing/api) -- the
- * `TTS_PRICING` row in `llm-pricing.ts`.
+ * Price: API list price $0.08 per 1 000 characters for v4 and v3 (https://elevenlabs.io/pricing/api, read 2026-11-12);
+ * the cost basis is the owner's Creator plan (`TTS_PRICING` row in `llm-pricing.ts`, 1 credit per character — kept
+ * conservative: a live 160-character v4 request reported `character-cost: 71`, i.e. v4 burns fewer credits than that).
  *
  * The key is read through `getProviderKey("elevenlabs")` (admin «Provayderlar» store, then ELEVENLABS_API_KEY),
  * goes into ONE header, and is scrubbed out of every error text before it can reach a log or a job.
@@ -29,8 +37,10 @@ import { mp3Seconds } from "./mp3";
 import { getProviderKey } from "../../server/providers/resolve";
 
 export const ELEVENLABS_BASE = "https://api.elevenlabs.io/v1/text-to-speech";
-/** `eleven_v3` is the only model that supports Uzbek (see the file header). */
-export const ELEVENLABS_MODEL = "eleven_v3";
+/** `eleven_v4`: the direct-API model that takes `language_code: "uz"` (see the file header, measured 2026-11-12). */
+export const ELEVENLABS_MODEL = "eleven_v4";
+/** Characters of one `eleven_v4` request (`GET /v1/models` `max_characters_request_*`, 2026-11-12). */
+export const ELEVENLABS_MAX_CHARS_PER_REQUEST = 10_000;
 /** The API default; 44.1 kHz / 128 kbps mono-compatible MP3 that `concatMp3` joins like the Azure output. */
 export const ELEVENLABS_OUTPUT_FORMAT = "mp3_44100_128";
 
@@ -40,8 +50,13 @@ export const ELEVENLABS_OUTPUT_FORMAT = "mp3_44100_128";
  * Needs a live listen on the first key: a premade English voice reading Uzbek is the thing to judge by ear.
  */
 
-/** Languages (ISO 639-1) of our 18 that `eleven_v3` lists; for the others the model detects the language itself. */
-const V3_LANGS: ReadonlySet<string> = new Set(["uz", "ru", "en", "kk", "tr", "ar", "de", "fr", "es", "it", "pt", "zh", "ja", "ko", "ky", "tg"]);
+/**
+ * Languages (ISO 639-1) of our 18 that get an explicit `language_code`; for the others (Karakalpak `kaa`, Uzbek
+ * Cyrillic `uz-cyrl`…) the model detects the language itself. `uz` is verified live on `eleven_v4` (2026-11-12); the
+ * rest are the list the v3 model page named, kept as is (v4 lists 94 languages in the live `GET /v1/models`; only `uz`
+ * was called one by one), and a code the model ever refuses is retried once without it (`unsupportedLanguage`).
+ */
+const LANGS: ReadonlySet<string> = new Set(["uz", "ru", "en", "kk", "tr", "ar", "de", "fr", "es", "it", "pt", "zh", "ja", "ko", "ky", "tg"]);
 
 export const elevenLabsKey = (): string => getProviderKey("elevenlabs");
 
@@ -52,7 +67,7 @@ export function elevenLabsBody(text: string, opts: TtsSynthOpts): Record<string,
   return {
     text,
     model_id: ELEVENLABS_MODEL,
-    ...(V3_LANGS.has(lang) ? { language_code: lang } : {}),
+    ...(LANGS.has(lang) ? { language_code: lang } : {}),
     // Documented range of `speed` is 0.7-1.2; 1 (or nothing) sends no voice_settings at all.
     ...(Number.isFinite(speed) && speed > 0 && Math.abs(speed - 1) >= 0.01 ? { voice_settings: { speed: Math.max(0.7, Math.min(1.2, speed)) } } : {}),
   };
@@ -65,6 +80,22 @@ export function elevenLabsUrl(voiceId: string): string {
 /** 429 and 5xx are worth another try; auth (401), quota (402/403), policy and validation (400/422) are not. */
 export function elevenLabsRetryable(status: number): boolean {
   return status === 429 || status >= 500;
+}
+
+/**
+ * The answer says the model does not take this `language_code` (400, `detail.status: "unsupported_language"` — the exact
+ * answer of `eleven_v3` + `uz` on 2026-11-12). Read on the FULL answer text, before it is cut for a log.
+ */
+export function unsupportedLanguage(status: number, text: string): boolean {
+  return status === 400 && /unsupported_language/.test(String(text ?? ""));
+}
+
+/** The same request without `language_code` (the one retry after `unsupportedLanguage`); `null` when it had none. */
+export function withoutLanguageCode(body: unknown): Record<string, unknown> | null {
+  if (!body || typeof body !== "object" || Array.isArray(body) || !("language_code" in body)) return null;
+  const { language_code: _dropped, ...rest } = body as Record<string, unknown>;
+  void _dropped;
+  return rest;
 }
 
 /**
@@ -106,20 +137,30 @@ export function makeElevenLabsTts(deps: ElevenLabsTtsDeps = {}): TtsProvider {
 
       const doFetch = deps.fetchImpl ?? fetch;
       const timeoutMs = Math.max(1_000, opts.timeoutMs ?? TTS_LIMITS.callTimeoutMs);
+      let json: Record<string, unknown> = elevenLabsBody(body, opts);
       let res: Response;
-      try {
-        res = await doFetch(elevenLabsUrl(voice), {
-          method: "POST",
-          signal: AbortSignal.timeout(timeoutMs),
-          headers: { "xi-api-key": k, "Content-Type": "application/json", Accept: "audio/mpeg" },
-          body: JSON.stringify(elevenLabsBody(body, opts)),
-        });
-      } catch (e) {
-        throw new TtsError("elevenlabs", scrubKey(e instanceof Error ? e.message : "tarmoq xatosi", k), { retryable: true });
+      let raw = "";
+      for (let attempt = 0; ; attempt++) {
+        try {
+          res = await doFetch(elevenLabsUrl(voice), {
+            method: "POST",
+            signal: AbortSignal.timeout(timeoutMs),
+            headers: { "xi-api-key": k, "Content-Type": "application/json", Accept: "audio/mpeg" },
+            body: JSON.stringify(json),
+          });
+        } catch (e) {
+          throw new TtsError("elevenlabs", scrubKey(e instanceof Error ? e.message : "tarmoq xatosi", k), { retryable: true });
+        }
+        if (res.ok) break;
+        raw = await res.text().catch(() => "");
+        // The model refuses the language code: once more without it (the model detects the language) — file header.
+        const bare = attempt === 0 && unsupportedLanguage(res.status, raw) ? withoutLanguageCode(json) : null;
+        if (!bare) break;
+        console.warn(`[tts] elevenlabs: ${ELEVENLABS_MODEL} refused language_code ${String(json.language_code)}; retrying without it`);
+        json = bare;
       }
 
       if (!res.ok) {
-        const raw = await res.text().catch(() => "");
         const detail = scrubKey(raw, k).slice(0, 200);
         const retryAfter = Number(res.headers.get("retry-after"));
         throw new TtsError("elevenlabs", `${res.status} ${res.statusText || "xato"}${detail ? `: ${detail}` : ""}`, {
@@ -148,7 +189,7 @@ export const elevenLabsTts = makeElevenLabsTts();
  *   text-to-speech  https://elevenlabs.io/docs/api-reference/text-to-speech/convert — `voice_settings.stability`
  *                   (default 0.5; lower = wider emotional range) and `speed` (default 1).
  *   dialogue        https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert — POST /v1/text-to-dialogue,
- *                   `{ inputs: [{text, voice_id}], model_id (default eleven_v3), language_code?, settings: {stability} }`,
+ *                   `{ inputs: [{text, voice_id}], model_id (we send eleven_v4), language_code?, settings: {stability} }`,
  *                   ≤ 10 voices, ≤ 2 000 characters; the answer is the audio file.
  *   voice clone     https://elevenlabs.io/docs/api-reference/voices/ivc/create — POST /v1/voices/add (multipart:
  *                   `name`, `files`, `remove_background_noise`, `description`, `labels`) → `{ voice_id, requires_verification }`.
@@ -173,17 +214,17 @@ export const ELEVENLABS_CLONE_MARKER = "SlaydX Studio";
 export const elevenLabsClonedVoicesUrl = (pageToken?: string): string =>
   `https://api.elevenlabs.io/v2/voices?category=cloned&page_size=100&search=${encodeURIComponent(ELEVENLABS_CLONE_MARKER)}${pageToken ? `&next_page_token=${encodeURIComponent(pageToken)}` : ""}`;
 
-/** The eleven_v3 languages above as a list (`lib/media/catalog-speech.ts ELEVENLABS_LANGS` must equal it). */
-export const ELEVENLABS_V3_LANGS: readonly string[] = [...V3_LANGS];
+/** The languages above as a list (`lib/media/catalog-speech.ts ELEVENLABS_LANGS` must equal it). */
+export const ELEVENLABS_LANG_CODES: readonly string[] = [...LANGS];
 
-/** eleven_v3 stability presets (Creative / Natural / Robust); anything else = the API default (nothing sent). */
+/** Stability presets (Creative / Natural / Robust); anything else = the API default (nothing sent). */
 const STABILITY = new Set([0, 0.5, 1]);
 
 export type StudioElevenOpts = { lang?: string; speed?: number; stability?: number };
 
 function langCode(lang: unknown): Record<string, string> {
   const l = String(lang ?? "").trim().toLowerCase();
-  return V3_LANGS.has(l) ? { language_code: l } : {};
+  return LANGS.has(l) ? { language_code: l } : {};
 }
 
 const stabilityOf = (v: unknown): number | null => {
@@ -192,7 +233,7 @@ const stabilityOf = (v: unknown): number | null => {
   return STABILITY.has(n) ? n : null;
 };
 
-/** Studio single-voice body: `elevenLabsBody`'s rules + the mood (`stability`) when it is a v3 preset. */
+/** Studio single-voice body: `elevenLabsBody`'s rules + the mood (`stability`) when it is a preset. */
 export function elevenLabsStudioBody(text: string, o: StudioElevenOpts): Record<string, unknown> {
   const speed = Number(o.speed);
   const stability = stabilityOf(o.stability);
@@ -235,7 +276,10 @@ export function elevenLabsSlotsOf(body: unknown): { used: number; limit: number;
 
 export type ElevenCall = { url: string; method: "GET" | "POST" | "DELETE"; json?: unknown; form?: FormData; accept?: string };
 
-/** One ElevenLabs HTTP call with the key in its header; a failed answer is a `TtsError` (key scrubbed, retryable 429/5xx). */
+/**
+ * One ElevenLabs HTTP call with the key in its header; a failed answer is a `TtsError` (key scrubbed, retryable 429/5xx).
+ * A JSON call refused with `unsupported_language` is sent once more without its `language_code` (`unsupportedLanguage`).
+ */
 export async function elevenLabsFetch(call: ElevenCall, o: { key: string; fetchImpl?: typeof fetch; timeoutMs?: number }): Promise<Response> {
   const doFetch = o.fetchImpl ?? fetch;
   const headers: Record<string, string> = {
@@ -256,6 +300,12 @@ export async function elevenLabsFetch(call: ElevenCall, o: { key: string; fetchI
   }
   if (!res.ok) {
     const raw = await res.text().catch(() => "");
+    // A model that refuses the language code: the same call once more without it (file header, 2026-11-12).
+    const bare = unsupportedLanguage(res.status, raw) ? withoutLanguageCode(call.json) : null;
+    if (bare) {
+      console.warn("[elevenlabs] the model refused language_code; retrying once without it");
+      return elevenLabsFetch({ ...call, json: bare }, o);
+    }
     const detail = scrubKey(raw, o.key).slice(0, 200);
     throw new TtsError("elevenlabs", `${res.status} ${res.statusText || "xato"}${detail ? `: ${detail}` : ""}`, { retryable: elevenLabsRetryable(res.status), status: res.status });
   }

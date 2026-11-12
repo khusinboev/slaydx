@@ -280,6 +280,7 @@ test("«Ovoz»: a fal model lists its voices only, no clones, no filter stuck on
   assert.equal(qa("[data-voice-row]").length, 9, "the nine voices the pages name, with the filter back on «Hammasi»");
   const adam = ELEVENLABS_VOICES.find((v) => v.name === "Adam")!;
   assert.ok(!q(`[data-voice-row="${adam.id}"]`), "Adam is not offered");
+  assert.ok(!q("[data-voice-badge]") && !q("[data-voice-group]"), "no native Uzbek library voice through fal (voices travel by name)");
   assert.ok(!q('[data-field="speed"]'), "the fal pages have no speed");
   assert.ok(q('[data-field="stability"]') && q('[data-field="lang"]'));
 });

@@ -2,7 +2,7 @@
  * Studio «Ovoz» adapters (docs/studio/P5-SPEC.md) on the media core. Kept apart from `speech.ts` (the podcast / greeting
  * wrappers, whose behaviour must stay byte-identical): these speak the Studio's own requests.
  *
- *   studio-elevenlabs-tts       POST /v1/text-to-speech/{voice}  — `elevenLabsStudioBody` (text, eleven_v3, language,
+ *   studio-elevenlabs-tts       POST /v1/text-to-speech/{voice}  — `elevenLabsStudioBody` (text, eleven_v4, language,
  *                               speed, stability)
  *   studio-elevenlabs-dialogue  POST /v1/text-to-dialogue        — `elevenLabsDialogueBody` (one input per turn)
  *   elevenlabs-clone            POST /v1/voices/add (multipart)  — the user's sample → `{ voice_id }` (returned as a JSON

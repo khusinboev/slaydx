@@ -11,7 +11,7 @@ import { Card, Segmented } from "@/components/forms/compact";
 import { Field } from "@/components/forms/shared";
 import { queueGeneration } from "@/components/forms/runGeneration";
 import { speechTextParam } from "@/lib/media/studio-speech";
-import { offeredVoices, takesClones, voiceParamsOf } from "@/lib/media/catalog-speech";
+import { defaultElevenVoice, offeredVoices, takesClones, voiceParamsOf } from "@/lib/media/catalog-speech";
 import { CatalogState } from "../CatalogState";
 import { MediaModelPicker } from "../MediaModelPicker";
 import { ParamRows } from "../ParamRows";
@@ -52,7 +52,7 @@ export function shownVoiceMode(state: VoiceTabState, split: ReturnType<typeof sp
   return can.text ? "text" : can.dialogue ? "dialogue" : null;
 }
 
-/** «Ovozlash · ElevenLabs v3 · ~280 so'm» (canvas). */
+/** «Ovozlash · ElevenLabs v4 · ~280 so'm» (canvas). */
 export function voiceSubmitLabel(model: string, price: number): string {
   return `Ovozlash · ${model} · ~${formatSom(price)}`;
 }
@@ -67,6 +67,23 @@ export function speechRequest(entry: ClientEntry, raw: RawValues): Record<string
   const max = entry.params.find((p) => p.name === field);
   const typed = String(raw[field] ?? "").trim();
   return { modelId: entry.id, ...values, [field]: max && max.type === "text" ? typed.slice(0, max.max) : typed };
+}
+
+/**
+ * The voices a user has not picked yet, by the text language: a direct ElevenLabs model (the ones that take clones)
+ * starts on a native Uzbek voice for Uzbek text (Davronbek; the dialogue's 2nd speaker Javohir) and on the premade pair
+ * (Rachel / Adam) for any other language. A picked voice is never replaced; Gemini and the fal models keep their own
+ * defaults.
+ */
+export function withVoiceDefaults(entry: ClientEntry, raw: RawValues): RawValues {
+  if (!entry.id.startsWith("elevenlabs/") || !takesClones(entry)) return raw;
+  const langParam = entry.params.find((p) => p.name === "lang");
+  const lang = raw.lang ?? (langParam && "default" in langParam ? langParam.default : "uz");
+  const out: RawValues = { ...raw };
+  voiceParamsOf(entry).forEach((n, i) => {
+    if (!String(raw[n] ?? "").trim()) out[n] = defaultElevenVoice(lang, i);
+  });
+  return out;
 }
 
 /**
@@ -163,12 +180,13 @@ export function VoiceTab({
   const field = speechTextParam(entry);
   const textMax = (entry.params.find((p) => p.name === field) as { max?: number } | undefined)?.max ?? 4000;
   const text = String(state.raw[field] ?? "");
-  const sent = speechRequest(entry, state.raw);
+  const raw = withVoiceDefaults(entry, state.raw);
+  const sent = speechRequest(entry, raw);
   const typedChars = String(effective(entry, { [field]: text })[field] ?? "").length;
   const price = typedChars > 0 ? speechClientPrice(entry, sent, catalog.pricing) : null;
   const vparams = voiceParamsOf(entry);
   const speakerParam = vparams[Math.min(state.speaker, vparams.length - 1)] ?? "voice";
-  const values = effective(entry, state.raw);
+  const values = effective(entry, raw);
   const provider = entry.id.startsWith("elevenlabs/") ? "elevenlabs" : "gemini";
   const clones = takesClones(entry);
   const library = voices ? offeredVoices(entry.id, provider === "elevenlabs" ? voices.library.elevenlabs : voices.library.gemini) : [];
@@ -372,6 +390,7 @@ export function VoiceTab({
               filter={filter}
               onFilter={(f) => patch({ filter: f })}
               filters={filters}
+              uzbekHint={library.some((v) => v.native)}
               onDelete={(r) => void remove(r)}
               deleting={deleting}
             />

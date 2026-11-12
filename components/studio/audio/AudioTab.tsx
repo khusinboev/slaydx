@@ -29,6 +29,7 @@ import type { StudioJob } from "../StudioResults";
 import { VoiceList, VoicesState, voiceRows, type VoiceFilter } from "../voice/VoiceList";
 import { VoiceResults } from "../voice/VoiceResults";
 import { useVoices } from "../voice/voice-api";
+import { ELEVENLABS_STS_VOICES } from "@/lib/media/catalog-speech";
 import type { PreparedSample } from "../voice/wav";
 import { AudioInputRow } from "./AudioInputRow";
 import { STUDIO_AUDIO_SLUG, STUDIO_AUDIO_TOOL_ID, audioCardPrice, audioClientPrice, uploadAudioInput } from "./audio-api";
@@ -38,6 +39,8 @@ import { MIX_MODES } from "@/lib/media/catalog-mix";
 import { SPEECH_TOOL_MODEL_IDS, type SpeechToolMode } from "@/lib/media/catalog-transcribe";
 import { SpeechToolPanel } from "./SpeechToolPanel";
 import { INITIAL_SPEECH_TOOL, offeredSpeechTools, type SpeechToolsState } from "./speech-tool-api";
+
+const STS_IDS: ReadonlySet<string> = new Set(ELEVENLABS_STS_VOICES.map((v) => v.id));
 
 /** The «Montaj» chip's mode id (P8c). */
 export const MIX_CHIP = "mix" as const;
@@ -308,7 +311,9 @@ export function AudioTab({
   }
 
   const provider = "elevenlabs" as const;
-  const rows = voices ? voiceRows(voices.library.elevenlabs, provider, voices.mine.filter((v) => v.status === "ready"), true, state.filter) : [];
+  // Speech-to-speech offers the premade voices only (`ELEVENLABS_STS_VOICES`: native library voices are untested there).
+  const stsLibrary = voices ? voices.library.elevenlabs.filter((v) => STS_IDS.has(v.id)) : [];
+  const rows = voices ? voiceRows(stsLibrary, provider, voices.mine.filter((v) => v.status === "ready"), true, state.filter) : [];
   const typed = String(raw.prompt ?? "");
 
   return (
