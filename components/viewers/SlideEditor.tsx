@@ -55,6 +55,11 @@ export { readItems, readText } from "./editable";
 /**
  * Tahrir QATLAMI — `SlideStage` ning `overlay` slotida (Muharrir 2).
  *
+ * EDIT MODE (2026-11-12, `editMode` prop): in view mode the layer only
+ * listens for the double click / double tap shortcut; in edit mode it draws
+ * the outlines and the image/answer controls and opens a text on ONE
+ * click/tap (see `editMode` below and docs/viewer/PLAN.md).
+ *
  * WYSIWYG: ikki bosilgan matn SLAYDNING O'ZIDA tahrirlanadi. Buning
  * uchun overlay ichida sahna bilan BIR XIL masshtabli «egizak» konteyner
  * bor (`transform: scale(scale)`), tahrir maydoni esa qatlamning aynan

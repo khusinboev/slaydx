@@ -382,7 +382,7 @@ export function SlideViewer({
    * the thumbnail strip and the status row are hidden, the result header
    * takes its compact form, and the viewer is capped to the visible
    * viewport (keyboard) so the stage never runs under it. Before the first
-   * edit a one-time hint tells touch users about the double tap.
+   * edit a one-time hint points touch users at the «Tahrirlash» button.
    */
   const coarse = useCoarsePointer();
   const phoneEditing = coarse && editMode && editingKey !== null;

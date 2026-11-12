@@ -23,7 +23,7 @@ import type { SlideModel } from "../../lib/generation/slide-types.ts";
  * «Tahrirlash» on the opened slide; a simple user must understand editing)
  * and the `?edit=1` entry the bot's «Tahrirlash» button uses.
  *
- * Contract (docs/viewer/EDIT-MODE.md):
+ * Contract (docs/viewer/PLAN.md «Explicit edit mode»):
  *  - view mode (default): a clean viewer — a single click/tap on a text does
  *    nothing, no outlines, no image/answer controls; double click / double
  *    tap is the shortcut into edit mode on that text;
