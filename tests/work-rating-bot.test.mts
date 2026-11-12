@@ -157,14 +157,15 @@ test("non-editable kinds get no edit button: pictures, audio, video, games, AI-p
 
 test("a non-public app URL: no edit button (Telegram refuses such web_app URLs) — MUTATSIYA 2", () => {
   const gen = "0a1b2c3d-4e5f-4061-8a9b-0c1d2e3f4a5b";
-  const prev = env.appUrl;
+  const mutable = env as { appUrl: string };
+  const prev = mutable.appUrl;
   try {
     for (const url of ["http://localhost:3000", "http://slaydx.test", "https://127.0.0.1:3000"]) {
-      env.appUrl = url;
+      mutable.appUrl = url;
       assert.equal(wr.editUrlFor(gen, "slide"), null, url);
     }
   } finally {
-    env.appUrl = prev;
+    mutable.appUrl = prev;
   }
 });
 
@@ -185,12 +186,15 @@ test("keyboards in three languages; rated button shows the stars", () => {
 test("callback codes: every gr code for every download format is ≤ 64 bytes and round-trips; forged ones are unknown — MUTATSIYA 6", () => {
   const gen = "ffffffff-ffff-4fff-bfff-ffffffffffff";
   for (const f of DOWNLOAD_FORMAT_IDS) {
-    const all = [
+    const all: Array<[string, unknown]> = [
       [codes.cb.workRate(gen, f), { kind: "workRate", generationId: gen, format: f }],
       [codes.cb.workBack(gen, f), { kind: "workBack", generationId: gen, format: f }],
-      ...[1, 2, 3, 4, 5].map((n) => [codes.cb.workStars(gen, f, n), { kind: "workStars", generationId: gen, format: f, stars: n }]),
-      ...(["design", "images", "text", "errors", "other", null] as const).map((r) => [codes.cb.workReason(gen, f, r), { kind: "workReason", generationId: gen, format: f, reason: r }]),
-    ] as const;
+      ...[1, 2, 3, 4, 5].map((n): [string, unknown] => [codes.cb.workStars(gen, f, n), { kind: "workStars", generationId: gen, format: f, stars: n }]),
+      ...(["design", "images", "text", "errors", "other", null] as const).map((r): [string, unknown] => [
+        codes.cb.workReason(gen, f, r),
+        { kind: "workReason", generationId: gen, format: f, reason: r },
+      ]),
+    ];
     for (const [c, parsed] of all) {
       assert.ok(Buffer.byteLength(c) <= 64, `${c}: ${Buffer.byteLength(c)} bytes`);
       assert.deepEqual(codes.parseCallback(c), parsed, c);
