@@ -6,21 +6,24 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 import { WalletPage } from "../../components/wallet/WalletPage.tsx";
-import { describeEntry, formatWhen, ledgerRow, providerLabel } from "../../components/wallet/wallet-model.ts";
+import { describeEntry, formatWhen, ledgerRow, providerLabel, topupFeatures } from "../../components/wallet/wallet-model.ts";
 import { paymentBonusNote } from "../../lib/payment-bonus.ts";
 
 /** A legacy Bonus 2 first top-up row (history; new payments write `paymentBonusNote`). */
 const FIRST_TOPUP_NOTE = "Birinchi to‘ldirish bonusi (10%)";
 import { PayDialog } from "../../components/overlays/PayDialog.tsx";
+import { openPay, usePayAmount } from "../../components/overlays/pay-amount.ts";
 import { useAppStore } from "../../lib/store.ts";
 import { useUi } from "../../lib/ui.ts";
 import { groupDigits } from "../../lib/format.ts";
+import { paynetPayLink } from "../../lib/paynet-link.ts";
 import { MAX_TOPUP_SOUM, MIN_TOPUP_SOUM } from "../../lib/topup-limits.ts";
 import type * as api from "../../lib/api-client.ts";
 
 /**
  * Redesign W3 «Hamyon» (docs/redesign/PLAN.md): balance hero, signed-out and
- * loading states, «To'ldirish» → the existing PayDialog, `?order=` banners,
+ * loading states, «To'ldirish» → the top-up sheet's method chooser, the «To'ldirish
+ * usullari» rows (owner 2026-11-12) → the sheet's «Summa» step, `?order=` banners,
  * the «Harakatlar» ledger (labels, signs, bonus so'm vs so'm) and the referral card.
  *
  * Mutations (each turned the named test red, then restored):
@@ -40,6 +43,7 @@ afterEach(() => {
   cleanup();
   globalThis.fetch = realFetch;
   useUi.setState({ overlay: null, returnTo: null });
+  usePayAmount.setState({ amount: 0, method: null, bonusPercent: null });
 });
 
 const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
