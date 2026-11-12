@@ -791,6 +791,27 @@ export const TOOLS: ToolConfig[] = [
     fields: [],
   },
   {
+    id: "title-page",
+    slug: "titul",
+    title: "Titul",
+    pageTitle: "Titul — bepul",
+    group: "talaba",
+    icon: "file-text",
+    tc: "2 132 199",
+    description: "Kurs ishi, diplom ishi va mustaqil ish uchun titul varag‘i — bepul",
+    submitLabel: "Titulni yaratish",
+    creatingLabel: "Titul tayyorlanmoqda...",
+    createdLabel: "titul tayyor!",
+    topicLegend: "Ish mavzusi",
+    topicPlaceholder: "Sun’iy intellektning ta’limdagi o‘rni",
+    output: "docx",
+    custom: "titul",
+    // FREE (owner request): a pure template render, no LLM; abuse is capped by `title.daily_limit` at submit.
+    basePrice: 0,
+    // `TitulComposer` draws its own form (`title-page/input.ts titulFieldsOf`).
+    fields: [],
+  },
+  {
     id: "lesson-plan",
     slug: "lesson-plan",
     title: "Dars rejasi",
@@ -1840,6 +1861,8 @@ export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | nu
     // The model list is the truth for `rasm` (OpenAI alone can serve it); the `images` flag is Gemini's.
     return features.imageModels.length > 0 ? null : "Rasm xizmati vaqtincha o‘chiq: serverda rasm kaliti sozlanmagan.";
   }
+  // «Titul» is a template render: no provider key decides it (it must stay open without an LLM key).
+  if (tool.custom === "titul") return null;
   if (tool.custom === "image" || tool.custom === "portrait") {
     return features.images
       ? null

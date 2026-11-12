@@ -14,6 +14,7 @@ import { effectivePrice } from "./pricing";
 import { getSetting } from "./settings";
 import { assertCanCreate } from "./mandatory-channels";
 import { assertOfferAccepted } from "./oferta";
+import { assertTitulDailyLimit, TITUL_TOOL_ID } from "./titul-limit";
 import { photoExists } from "./photo";
 import { portraitInputFromValues } from "../generation/portrait/registry";
 import { videoInputFromValues } from "../generation/video/registry";
@@ -356,6 +357,9 @@ export async function prepareGeneration(input: SubmitInput): Promise<PreparedGen
 
   // Admin pause (§6.10): checked before pricing and charging, so nothing is charged or queued.
   if (!replay) await assertGenerationOpen(tool.id);
+
+  // «Titul» is free: its abuse guard is a per-user daily cap (`title.daily_limit`), checked before anything is queued.
+  if (tool.id === TITUL_TOOL_ID && !replay) await assertTitulDailyLimit(userId);
 
   // Base formula + admin adjustment (`tool_pricing`, 15 s cache); never the client's number.
   const price = await effectivePrice(tool, values);

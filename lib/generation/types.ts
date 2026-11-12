@@ -1,4 +1,5 @@
 import type { CustomTemplate } from "./pptx-template";
+import type { TitulModel } from "./title-page/types";
 import type { TranslationReport } from "./translate/report";
 import type { FormValues, ToolConfig, ToolId } from "../types";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "./slide-templates";
@@ -623,6 +624,11 @@ export type AcademicDoc = {
    * (`ImageViewer`) rasmni ko'rsatadi, hisobot paneli esa `review` ni.
    */
   infographic?: InfographicModel;
+  /**
+   * «Titul» (free title-page builder, `title-page/`): the normalized form input + in-place edits. The page is
+   * drawn from `planTitlePage(doc.titul)` by BOTH the DOCX (`title-page/render-docx.ts`) and the viewer.
+   */
+  titul?: TitulModel;
   images?: GenImage[];
   /**
    * Studio «AI yaxshilash»: the English prompt that went to the provider, present only when it differs from the user's text.

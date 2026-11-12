@@ -179,6 +179,8 @@ test("adapterFor: vosita → adapter; tahrirlanmaydigan vosita — null", () => 
       "slide", "pro-slide", "resume", "article", "thesis", "essay",
       "coursework", "referat", "mustaqil-ish", "konspekt",
       "lesson-plan", "texnologik-xarita", "glossary", "keys", "test",
+      // «Titul» (free title page): `titulAdapter` — in-place text edits of `planTitlePage` runs.
+      "title-page",
     ]),
   );
 });
