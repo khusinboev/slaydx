@@ -31,7 +31,7 @@ import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks
  *   - CreateSheet tiles `min-h-[5.5rem]` → `min-h-8`, close `size-11` → `size-8`;
  *   - SearchDialog input `text-base` → `text-sm`, rows `min-h-12` → `min-h-9`;
  *   - Notifications / Pay / Login close button `size-11` → `size-8`;
- *   - PayDialog presets `h-11` → `h-10`;
+ *   - PayDialog chips `min-h-11` → `min-h-10`, method rows `min-h-[68px]` → `min-h-10`;
  *   - OverlayFrame dropping the `visualViewport` height (keyboard) or the safe padding;
  *   - LoginForm input `text-base` removed.
  *   - W5: sheet without the grabber; `--sheet-pb` without the bottom safe area; search «Balansni
@@ -347,51 +347,56 @@ test("NotificationsPanel desktop: a centred dialog (no popover offset), 40 px cl
 });
 
 // ------------------------------------------------------------------ pay
-// Redesign W5: amount chips became ≥ 64 px cards (was: 44 px phone / 40 px desktop chips).
+// Owner 2026-11-12: the sheet is a wizard — the method chooser (≥ 68 px rows), then «Summa» (56 px input,
+// ≥ 44 px quick-fill chips, 48 px «Davom etish»). Was: ≥ 64 px amount cards + method tiles on one screen.
 
-test("PayDialog phone: a bottom sheet with ≥ 64 px amount cards, 44 px close and ≥ 48 px methods; scrolls inside", () => {
+const payFeatures = (payments: Record<string, unknown>) =>
+  useAppStore.setState({ features: { llm: true, images: true, telegram: false, telegramBot: null, devLogin: false, pdf: true, payments } as never });
+
+test("PayDialog phone: a bottom sheet; ≥ 68 px method rows, 44 px close; the amount step's 56 px input, 44 px chips and back arrow; scrolls inside", async () => {
   phoneMedia(true);
   signIn();
   useUi.setState({ overlay: "pay" });
   render(inRouter(h(PayDialog)));
-  const chips = [...document.querySelectorAll("[aria-pressed]")];
-  assert.equal(chips.length, 4);
-  for (const c of chips) assert.ok(has(c, "min-h-16"), "amount card ≥ 64 px");
-  const card = chips[0].closest(".overflow-y-auto");
+  // Providers that are not configured are not drawn (no «o'chiq» placeholders).
+  assert.ok(!document.querySelector("[data-pay-method]"), "unconfigured: not drawn");
+  cleanup();
+  payFeatures({ click: true, payme: true, clickDirect: true, paynet: true });
+  render(inRouter(h(PayDialog)));
+  const rows = [...document.querySelectorAll("[data-pay-methods] [data-pay-method]")];
+  assert.equal(rows.length, 5);
+  for (const r of rows) assert.ok(has(r, "min-h-[68px]"), "method row ≥ 44 px");
+  const card = rows[0]!.closest(".overflow-y-auto");
   assert.ok(card && has(card, "max-h-full"), "internal scroll");
   assert.ok(has(card, "rounded-t-[26px]") && card.querySelector("[data-sheet-grabber]"), "bottom sheet");
   assert.ok(has(card.querySelector('button[aria-label="Yopish"]'), "size-11"));
-  // Providers that are not configured are not drawn (no «o'chiq» placeholders): enable both here.
-  assert.equal(screen.queryByText(/^Click/), null, "unconfigured: not drawn");
-  cleanup();
-  useAppStore.setState({
-    features: { llm: true, images: true, telegram: false, telegramBot: null, devLogin: false, pdf: true, payments: { click: true, payme: true } } as never,
+  await act(async () => {
+    fireEvent.click(rows[0]!);
   });
-  render(inRouter(h(PayDialog)));
-  // Tiles (owner 2026-11-01): the app tiles are ≥ 84 px, the secondary ones ≥ 76 px.
-  for (const [m, cls] of [["click", "min-h-[84px]"], ["payme", "min-h-[76px]"]] as const) {
-    assert.ok(has(document.querySelector(`[data-pay-method="${m}"]`), cls), `${m} tile ≥ 48 px`);
-  }
-  // Merchant API on (owner 2026-10-09): Click app / Telefon raqam / Karta tiles ≥ 76 px, the input is 48 px.
-  cleanup();
-  useAppStore.setState({
-    features: { llm: true, images: true, telegram: false, telegramBot: null, devLogin: false, pdf: true, payments: { click: true, payme: true, clickDirect: true } } as never,
-  });
-  render(inRouter(h(PayDialog)));
-  for (const m of ["card", "phone", "app", "payme"]) assert.match(document.querySelector(`[data-pay-method="${m}"]`)!.className, /min-h-\[(7[6-9]|8\d)px\]/, `${m} tile ≥ 76 px`);
-  assert.ok(has(document.querySelector("[data-pay-input]"), "h-12"), "free amount input ≥ 48 px");
-  assert.ok(has(document.querySelector("[data-pay-input]"), "text-base"), "16 px text: iOS does not zoom");
+  const chips = [...document.querySelectorAll("[data-pay-amount]")];
+  assert.equal(chips.length, 4);
+  for (const c of chips) assert.ok(has(c, "min-h-11"), "chip ≥ 44 px");
+  const input = document.querySelector("[data-pay-amount-input]");
+  assert.ok(has(input, "h-14"), "amount input ≥ 48 px");
+  assert.ok(has(input, "text-[22px]") && !has(input, "text-base") && !has(input, "h-12"), "≥ 16 px text (iOS does not zoom), no conflicting classes");
+  assert.ok(has(document.querySelector("[data-pay-continue]"), "h-12"), "48 px «Davom etish»");
+  assert.ok(has(document.querySelector("[data-pay-back]"), "size-11"), "44 px back arrow");
 });
 
-test("PayDialog desktop: a centred dialog, same ≥ 64 px amount cards, 40 px close", () => {
+test("PayDialog desktop: a centred dialog, 40 px close and back arrow", async () => {
   signIn();
+  payFeatures({ click: true, payme: true });
   useUi.setState({ overlay: "pay" });
   render(inRouter(h(PayDialog)));
-  for (const c of document.querySelectorAll("[aria-pressed]")) assert.ok(has(c, "min-h-16"));
   assert.ok(!document.querySelector(".size-11"));
   assert.ok(!document.querySelector("[data-sheet-grabber]"));
   const frame = document.querySelector("[data-overlay-frame]");
   assert.ok(has(frame, "items-center") && !frame?.getAttribute("style"));
+  await act(async () => {
+    fireEvent.click(document.querySelector('[data-pay-method="click"]')!);
+  });
+  assert.ok(has(document.querySelector("[data-pay-back]"), "size-10"));
+  assert.ok(!document.querySelector(".size-11"));
 });
 
 // ------------------------------------------------------------------ login

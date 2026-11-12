@@ -327,6 +327,8 @@ test("voice changer: the ElevenLabs library + ready own clones; the pick goes ou
   await mode("voice-changer");
   await settle(20);
   assert.ok(q(`[data-voice-pick="${ELEVENLABS_VOICES[0]!.id}"]`));
+  // Speech-to-speech is untested with a shared-library voice (2026-11-12): the native Uzbek voices are not offered.
+  assert.ok(!q("[data-voice-badge]") && !q(`[data-voice-pick="agoC45V78njTIxYzwmSb"]`), "no native Uzbek voice in the voice changer");
   assert.ok(q(`[data-voice-pick="${READY_CLONE.voice}"]`), "a ready clone is offered");
   assert.ok(!q(`[data-voice-pick="${MAKING_CLONE.voice}"]`), "a clone still being made is not");
   assert.ok(!q('[data-voice-pick="Kore"]'), "no Gemini voices");

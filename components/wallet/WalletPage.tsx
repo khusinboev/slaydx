@@ -8,13 +8,14 @@ import { formatPoints } from "@/lib/referral";
 import { creditTotal, useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { ReferralCard } from "../profile/ReferralCard";
-import { DEFAULT_TOPUP, TOPUP_PRESETS, openPay } from "../overlays/pay-amount";
-import { formatBonusSom, groupDigits } from "@/lib/format";
+import { openPay, usePayAmount } from "../overlays/pay-amount";
+import { MethodList, enabledPayMethods, type PayMethodId } from "../overlays/pay/methods";
+import { formatBonusSom } from "@/lib/format";
 import { WalletReturnCard } from "@/components/market/WalletReturnCard";
 import { PaymentBanner } from "./PaymentBanner";
 import { usePaymentReturn } from "./usePaymentReturn";
 import { isPaymentBonusPercent, paymentBonusHint } from "@/lib/payment-bonus";
-import { TOPUP_FEATURES, UNIT_LABEL, formatWhen, ledgerRow, orderStateLabel, providerLabel } from "./wallet-model";
+import { UNIT_LABEL, formatWhen, ledgerRow, orderStateLabel, providerLabel, topupFeatures } from "./wallet-model";
 
 /** Where the login returns to (the lead routes `/uz/wallet`; `/uz/purchase` redirects here keeping `?order=`). */
 export const WALLET_PATH = "/uz/wallet";
@@ -39,8 +40,8 @@ const heroFocus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-
  * return banner (`?order=`), the ledger («Harakatlar»), recent payments and the
  * referral card. No page header — the shell's `PageHeader` «Hamyon» wraps it.
  *
- * «To'ldirish» opens the existing `PayDialog` (amount presets + Click/Payme/Paynet
- * live there), as the old purchase page did.
+ * «To'ldirish» opens the top-up sheet (`PayDialog`) at its method chooser; each
+ * «To'ldirish usullari» row opens it at that method's «Summa» step.
  */
 export function WalletPage() {
   const sessionChecked = useAppStore((s) => s.sessionChecked);
@@ -50,6 +51,11 @@ export function WalletPage() {
   const pay = usePaymentReturn();
   /** `GET /api/users/me` `paymentBonusPercent` (loaded with the ledger, again after a payment lands); 0 = no hint. */
   const [bonusPercent, setBonusPercent] = useState(0);
+  /** The top-up sheet's «Summa» step previews the bonus with the same percent. */
+  const onBonusPercent = useCallback((p: number) => {
+    setBonusPercent(p);
+    usePayAmount.getState().setBonusPercent(p);
+  }, []);
 
   const toReferral = useCallback(() => {
     const el = document.getElementById("wallet-referral");
@@ -144,11 +150,11 @@ export function WalletPage() {
         </section>
       )}
 
-      {sessionChecked && !(loggedIn && !user) ? <QuickTopUp bonusPercent={ready ? bonusPercent : 0} /> : null}
+      {sessionChecked && !(loggedIn && !user) ? <TopUpMethods bonusPercent={ready ? bonusPercent : 0} /> : null}
 
       {ready ? (
         <>
-          <Ledger paidOrder={pay.orderState === "paid" ? pay.orderId : null} onBonusPercent={setBonusPercent} />
+          <Ledger paidOrder={pay.orderState === "paid" ? pay.orderId : null} onBonusPercent={onBonusPercent} />
           <Orders orders={pay.orders} />
           <h2 className={sectionLabel}>Do&apos;stlar</h2>
           <div id="wallet-referral" tabIndex={-1} className="scroll-mt-4 rounded-[20px] focus:outline-none">
@@ -162,18 +168,25 @@ export function WalletPage() {
 }
 
 /**
- * «Tez to'ldirish» (redesign W5, variant A packages): one card per PayDialog
- * amount (`TOPUP_PRESETS`, the same list), «eng qulay» on the dialog's
- * default; a tap opens PayDialog with that amount preselected
- * (`openPay({ amount })`). Below them the top-up facts (formerly the separate
- * «To'lov haqida» card). While the payment bonus is on (C-Q4, percent > 0), its
- * hint «Har bir to‘ldirishga +N% bonus» sits above the amounts.
+ * «To'ldirish usullari» (owner 2026-11-12): no preset amounts on the page — one row per top-up method
+ * the server has switched on (`pay/methods.tsx`, the same list the sheet's chooser draws). A row opens
+ * the top-up sheet at its «Summa» step (`openPay({ method })`, an empty amount); signed out it opens
+ * the login first. While the payment bonus is on (C-Q4, percent > 0), its hint «Har bir to‘ldirishga
+ * +N% bonus» sits under the title. Below the rows the top-up facts.
  */
-function QuickTopUp({ bonusPercent }: { bonusPercent: number }) {
+function TopUpMethods({ bonusPercent }: { bonusPercent: number }) {
+  const loggedIn = useAppStore((s) => s.loggedIn);
+  const payments = useAppStore((s) => s.features?.payments);
+  const open = useUi((s) => s.open);
+  const methods = enabledPayMethods(payments);
+  const pick = (id: PayMethodId) => {
+    if (!loggedIn) open("login", { returnTo: WALLET_PATH });
+    else openPay({ method: id });
+  };
   return (
-    <section aria-labelledby="wallet-packs-title" data-wallet-packs>
-      <h2 id="wallet-packs-title" className={sectionLabel}>
-        Tez to&apos;ldirish
+    <section aria-labelledby="wallet-methods-title" data-wallet-methods>
+      <h2 id="wallet-methods-title" className={sectionLabel}>
+        To&apos;ldirish usullari
       </h2>
       {bonusPercent > 0 ? (
         <p
@@ -184,32 +197,15 @@ function QuickTopUp({ bonusPercent }: { bonusPercent: number }) {
           {paymentBonusHint(bonusPercent)}
         </p>
       ) : null}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {TOPUP_PRESETS.map((v) => {
-          const best = v === DEFAULT_TOPUP;
-          return (
-            <button
-              key={v}
-              type="button"
-              data-wallet-pack={v}
-              aria-label={`${groupDigits(v)} so'm${best ? ", eng qulay" : ""} — to'ldirish`}
-              onClick={() => openPay({ amount: v })}
-              className={cn(
-                "bg-card hover:bg-accent flex min-h-[4.5rem] flex-col items-center justify-center rounded-[16px] border px-2 py-2.5 text-center tabular-nums shadow-[var(--shadow-card)] transition-[background-color,transform] active:scale-[0.98] motion-reduce:transform-none",
-                best && "border-primary shadow-[inset_0_0_0_1px_var(--primary)]",
-                focusRing,
-              )}
-            >
-              <span className="text-[17px] leading-tight font-bold">{groupDigits(v)}</span>
-              <span className={cn("mt-0.5 text-[13px] leading-tight", best ? "text-accent-soft-foreground font-semibold" : "text-muted-foreground")}>
-                {best ? "eng qulay" : "so'm"}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {methods.length ? (
+        <MethodList methods={methods} hook="wallet" onPick={pick} className="shadow-[var(--shadow-card)]" />
+      ) : (
+        <p className={cn(card, "text-muted-foreground px-4 py-4 text-[14.5px] leading-snug")} data-wallet-methods-none>
+          To&apos;lov usullari hali ulanmagan.
+        </p>
+      )}
       <ul className="text-muted-foreground mt-3 grid gap-x-4 gap-y-1.5 px-1 text-[13.5px] leading-snug sm:grid-cols-2" data-wallet-features>
-        {TOPUP_FEATURES.map((f) => (
+        {topupFeatures(payments).map((f) => (
           <li key={f} className="flex gap-2">
             <Check className="text-primary mt-px size-4 shrink-0" aria-hidden="true" />
             {f}

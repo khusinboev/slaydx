@@ -14,6 +14,7 @@ const { useUi } = await import("../../lib/ui.ts");
 const { dropMediaCatalog } = await import("../../components/studio/studio-api.ts");
 const { studioSpeechPrice } = await import("../../lib/media/studio-speech.ts");
 const { voiceRows, daysLeft } = await import("../../components/studio/voice/VoiceList.tsx");
+const { withVoiceDefaults } = await import("../../components/studio/voice/VoiceTab.tsx");
 const { cloneBlocker } = await import("../../components/studio/voice/ClonePanel.tsx");
 
 /**
@@ -24,7 +25,7 @@ const { cloneBlocker } = await import("../../components/studio/voice/ClonePanel.
  *     no «Fon musiqa» (P6) control is drawn;
  *   - voice list: filter chips Hammasi / Erkak / Ayol / Mening ovozlarim (the last only for a model that takes clones),
  *     each chip filters the rows; a row's ▶ mounts ONE preview player for that voice (nothing before the click);
- *   - the price on the button = the server formula («Ovozlash · ElevenLabs v3 · ~4 700 so'm» for 1 000 characters), the
+ *   - the price on the button = the server formula («Ovozlash · ElevenLabs v4 · ~4 700 so'm» for 1 000 characters), the
  *     character line with «~N s»; the submit sends slug `studio-speech`, `{modelId, …schema}` and that `expectedPrice`;
  *   - «every param must work»: each schema param of the chosen model has exactly one `data-field`;
  *   - clone: the consent checkbox is REQUIRED (button disabled, the reason shown); with it, the sample upload carries
@@ -38,6 +39,8 @@ const { cloneBlocker } = await import("../../components/studio/voice/ClonePanel.
  *   5. consent check dropped from `cloneBlocker`                              -> «clone»;
  *   6. sample upload sends `consent=0`                                        -> «clone»;
  *   7. `takesClones` ignored in the tab (clone button for Gemini)             -> «voice list».
+ *   8. `uzbekFirst` dropped from `voiceRows` (premade voices first)          -> «Uzbek voices»;
+ *   9. `withVoiceDefaults` always picks the non-Uzbek default                -> «Uzbek voices», «default voices by language».
  */
 
 Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
@@ -169,6 +172,57 @@ test("voice list: chips filter rows; «Mening ovozlarim» only where clones spea
   assert.equal(daysLeft(new Date(Date.now() + 2.5 * 86_400_000).toISOString()), 3);
 });
 
+const DAVRONBEK = "agoC45V78njTIxYzwmSb";
+const JAVOHIR = "AgD9yC0DyOI1g9AP3l45";
+const NATIVE = ELEVENLABS_VOICES.filter((v) => v.native);
+
+test("Uzbek voices: listed first under «O‘zbek tilidagi ovozlar» with a badge; Davronbek is the default; «Ayol» hint", async () => {
+  const a = api();
+  await mount();
+  await openVoice();
+  assert.equal(NATIVE.length, 14);
+  const rows = qa("[data-voice-row]").map((r) => r.getAttribute("data-voice-row"));
+  assert.deepEqual(rows.slice(0, 14).sort(), NATIVE.map((v) => v.id).sort(), "MUTATSIYA: uzbekFirst olib tashlansa premade ovozlar birinchi chiqadi");
+  const groups = qa("[data-voice-group]");
+  assert.deepEqual(groups.map((g) => [g.getAttribute("data-voice-group"), g.textContent]), [
+    ["uz", "O‘zbek tilidagi ovozlar"],
+    ["other", "Boshqa ovozlar"],
+  ]);
+  assert.equal(qa('[data-voice-badge="uz"]').length, 14);
+  assert.match(q(`[data-voice-row="${DAVRONBEK}"]`)!.textContent ?? "", /Davronbek.*O‘zbekcha.*Jurnalist.*Erkak/);
+  assert.equal(q(`[data-voice-pick="${DAVRONBEK}"]`)!.getAttribute("aria-checked"), "true", "the default voice for Uzbek text");
+  // «Ayol»: the five premade female voices and the one-line hint; «Erkak»: no hint, native + premade men.
+  await click(q('[data-voice-filter="female"]'));
+  assert.equal(qa("[data-voice-row]").length, ELEVENLABS_VOICES.filter((v) => v.gender === "female").length);
+  assert.match(q("[data-voice-female-hint]")?.textContent ?? "", /ayol ovozi hozircha yo‘q/);
+  await click(q('[data-voice-filter="male"]'));
+  assert.ok(!q("[data-voice-female-hint]"));
+  assert.equal(qa("[data-voice-row]").length, 5 + 14);
+  // Native preview: the same endpoint, keyed by the voice id only.
+  await click(q(`[data-voice-play="elevenlabs:${DAVRONBEK}"]`));
+  assert.equal(q("[data-voice-preview]")!.getAttribute("src"), `/api/media/voices/preview/${encodeURIComponent(`elevenlabs:${DAVRONBEK}`)}`);
+  // Sent without a pick: Davronbek.
+  await type("[data-voice-text] textarea", "Assalomu alaykum!");
+  await click(q("[data-studio-submit]"));
+  await settle();
+  assert.equal((a.posts()[0]!.body!.values as Record<string, unknown>).voice, DAVRONBEK);
+  // Gemini: no native group, no hint.
+  await click(q("[data-model-card=\"google/gemini-tts\"]"));
+  await click(q('[data-voice-filter="female"]'));
+  assert.ok(!q("[data-voice-group]") && !q("[data-voice-female-hint]"));
+});
+
+test("default voices by language (pure): Uzbek → Davronbek / Javohir, others → Rachel / Adam, a pick is kept", () => {
+  const tts = SPEECH[0]!;
+  const dia = SPEECH[2]!;
+  assert.equal(withVoiceDefaults(tts, {}).voice, DAVRONBEK);
+  assert.equal(withVoiceDefaults(tts, { lang: "ru" }).voice, "21m00Tcm4TlvDq8ikWAM");
+  assert.equal(withVoiceDefaults(tts, { lang: "ru", voice: DAVRONBEK }).voice, DAVRONBEK, "a picked voice is never replaced");
+  assert.deepEqual([withVoiceDefaults(dia, {}).voice1, withVoiceDefaults(dia, {}).voice2], [DAVRONBEK, JAVOHIR]);
+  assert.deepEqual([withVoiceDefaults(dia, { lang: "en" }).voice1, withVoiceDefaults(dia, { lang: "en" }).voice2], ["21m00Tcm4TlvDq8ikWAM", "pNInz6obpgDQGcFmaJgB"]);
+  assert.deepEqual(withVoiceDefaults(SPEECH[1]!, { lang: "ru" }), { lang: "ru" }, "Gemini keeps its own defaults");
+});
+
 test("price button, character line, request; every schema param has exactly one data-field", async () => {
   const a = api();
   await mount();
@@ -178,7 +232,7 @@ test("price button, character line, request; every schema param has exactly one 
   assert.equal(txt("[data-voice-chars]"), "1 000 / 4 000 belgi · ~67 s");
   const price = studioSpeechPrice({ modelId: ids[0], text }, RATE)!;
   assert.equal(price, 4700);
-  assert.match(txt("[data-studio-submit]"), /Ovozlash · ElevenLabs v3 · ~4 700/);
+  assert.match(txt("[data-studio-submit]"), /Ovozlash · ElevenLabs v4 · ~4 700/);
   for (const p of SPEECH[0]!.params) assert.equal(qa(`[data-field="${p.name}"]`).length, 1, `data-field ${p.name}`);
   await click(q('[data-voice-pick="pNInz6obpgDQGcFmaJgB"]'));
   await click(q("[data-studio-submit]"));

@@ -1,16 +1,25 @@
 /**
- * Studio «Ovoz» tab models (docs/studio/P5-SPEC.md) — Gemini TTS, ElevenLabs Eleven v3 (Uzbek), two-speaker dialogue
+ * Studio «Ovoz» tab models (docs/studio/P5-SPEC.md) — Gemini TTS, ElevenLabs Eleven v4 (Uzbek), two-speaker dialogue
  * on both, and ElevenLabs Instant Voice Cloning, plus the purposes `studio.speech` / `studio.clone`. `catalog.ts`
  * spreads these into `MEDIA_ENTRIES` / `MEDIA_PURPOSES` (one import, two spreads).
  *
  * Client-safe (no server imports) and NOT importing `catalog.ts` (that file imports this one).
  *
- * PROVIDER COSTS (USD), read 2026-11-02:
- *   ElevenLabs v3        the REAL plan cost (owner decision 2026-11-02): Creator $22 / 121 000 credits ≈ $0.1818 per
+ * MODEL (measured LIVE on production 2026-11-12): the direct ElevenLabs calls run `eleven_v4` — `eleven_v3` answers
+ * `language_code: "uz"` with 400 `unsupported_language` (text-to-speech and text-to-dialogue alike; `uz` is not in v3's
+ * 74 languages any more), `eleven_v4` takes it (94 languages, 10 000 characters per request, cost multiplier 1). The
+ * catalog ids `elevenlabs/eleven-v3` / `elevenlabs/v3-dialogue` are KEPT (only the label says v4): they are persisted in
+ * `media_jobs.model_id`, `doc_json.speech.model`, the «Media modellari» switches and per-model price overrides — a new id
+ * would orphan all of them, and nothing outside this file reads the id as a model version.
+ *
+ * PROVIDER COSTS (USD), read 2026-11-02 (re-read 2026-11-12):
+ *   ElevenLabs v4        the REAL plan cost (owner decision 2026-11-02): Creator $22 / 121 000 credits ≈ $0.1818 per
  *                        1 000 characters (https://elevenlabs.io/pricing) — the `TTS_PRICING` row
  *                        (`ELEVENLABS_CREATOR_USD_PER_M_CHARS`), one price book with the podcast's cost telemetry. The
- *                        API list price ($0.08, https://elevenlabs.io/pricing/api) is not what the owner pays.
- *   ElevenLabs dialogue  the same v3 character price (text-to-dialogue runs `eleven_v3`, its default model).
+ *                        API list price ($0.08 for v4 and v3, https://elevenlabs.io/pricing/api) is not what the owner
+ *                        pays. Kept at 1 credit per character although a live 160-character v4 request reported
+ *                        `character-cost: 71` (2026-11-12): one sample is no rate, and the higher figure errs for the house.
+ *   ElevenLabs dialogue  the same character price (text-to-dialogue with `model_id: eleven_v4`).
  *   Gemini TTS           token-billed: $10 / 1M audio-out tokens + $0.50 / 1M text-in (`TTS_PRICING`, Flash TTS row),
  *                        25 audio tokens / s (`GEMINI_AUDIO_TOKENS_PER_SECOND`). The quote assumes Uzbek speech at
  *                        15 characters / s (`SPEECH_CHARS_PER_SECOND`, a slow reading pace so the quote errs high) and
@@ -23,15 +32,20 @@
  *   Voice cloning (IVC)  no per-call provider price (included in the plan, uses a voice slot); the user pays the
  *                        fixed `studio.clone_price` setting (owner 2026-11-02: 5 000 so'm), not cost × markup.
  *
- * LIMITS (ElevenLabs model page https://elevenlabs.io/docs/overview/models and text-to-dialogue reference
- * https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert, read 2026-11-02): eleven_v3 5 000 characters per
- * request and lists Uzbek; text-to-dialogue ≤ 2 000 characters across all inputs, ≤ 10 voices. Gemini: one call
+ * LIMITS (live `GET /v1/models` 2026-11-12 and the text-to-dialogue reference
+ * https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert, read 2026-11-02): eleven_v4 10 000 characters per
+ * request and takes Uzbek; text-to-dialogue ≤ 2 000 characters across all inputs, ≤ 10 voices. Gemini: one call
  * ≤ 1 400 characters (`TTS_LIMITS.geminiChunkChars`, the timeout lesson of 2026-10-13) — longer single-voice text is
  * split into chunks and joined; a Gemini dialogue is one call.
  *
- * VOICES: the ElevenLabs default (premade) voices by their public ids and Gemini prebuilt voices by name. Gender labels
- * are the providers' own descriptions; how well each one reads Uzbek is UNVERIFIED until a live listen (the Uzbek
- * preview of each voice is what the user judges by, `app/api/media/voices/preview`).
+ * VOICES: the 14 native Uzbek voices of the ElevenLabs voice library (`GET /v1/shared-voices?language=uz`, 2026-11-12),
+ * the ElevenLabs default (premade) voices by their public ids, and Gemini prebuilt voices by name. A library voice is
+ * used by id in text-to-speech / text-to-dialogue WITHOUT adding it to the account (no voice slot; verified 200 OK on
+ * production 2026-11-12, `category: professional`, `rate: 1` = no surcharge, verified for the v4 family only). All 14
+ * are male speakers (the first one's provider gender label says "female" but its description says "young adult male
+ * voice": stored male); the library has no female native-Uzbek voice — the premade female voices read Uzbek through v4.
+ * Gender labels are the providers' own descriptions; how well each one sounds is judged by its Uzbek preview
+ * (`app/api/media/voices/preview`).
  */
 import type { CatalogEntry, ParamSchema, PurposeSpec } from "../studio-core";
 import { TTS_PRICING, GEMINI_AUDIO_TOKENS_PER_SECOND } from "../generation/llm-pricing";
@@ -40,7 +54,7 @@ export const STUDIO_SPEECH_PURPOSE = "studio.speech";
 export const STUDIO_CLONE_PURPOSE = "studio.clone";
 
 /**
- * Longest single-voice text of one Studio job: one eleven_v3 request (≤ 5 000), and the generic form-field cap of
+ * Longest single-voice text of one Studio job: under one eleven_v4 request (≤ 10 000), and the generic form-field cap of
  * `sanitizeValues` (`lib/server/validate.ts MAX_FIELD` = 4 000) — a longer text would be cut on the server and priced
  * differently from the preview (`tests/studio-speech.test.mts` pins both).
  */
@@ -52,7 +66,10 @@ export const GEMINI_DIALOGUE_MAX_CHARS = 1_400;
 /** Speech pace the «~N s» estimate and the Gemini quote assume (characters per second of audio). */
 export const SPEECH_CHARS_PER_SECOND = 15;
 
-export const ELEVENLABS_V3_MODEL = "eleven_v3";
+/** The direct ElevenLabs model (`lib/generation/tts/elevenlabs.ts ELEVENLABS_MODEL`, a test keeps them equal). */
+export const ELEVENLABS_DIRECT_MODEL = "eleven_v4";
+/** Characters of one `eleven_v4` request (live `GET /v1/models`, 2026-11-12). */
+export const ELEVENLABS_DIRECT_MAX_CHARS = 10_000;
 
 export const FAL_ELEVEN_V3_MODEL = "elevenlabs/eleven-v3-fal";
 export const FAL_ELEVEN_V4_TURBO_MODEL = "elevenlabs/eleven-v4-turbo-fal";
@@ -67,10 +84,38 @@ export const VOICE_PREVIEW_TEXT = "Assalomu alaykum! Matningiz shu ovoz bilan o�
 export const previewKeyOf = (provider: "elevenlabs" | "gemini", id: string): string => `${provider}:${id}`;
 
 export type VoiceGender = "female" | "male";
-export type LibraryVoice = { id: string; name: string; gender: VoiceGender };
+/**
+ * A library voice. `native: true` + `lang` = a native speaker of that language (the 14 Uzbek ElevenLabs library voices),
+ * `note` its short Uzbek style line for the list («Diktor», «Suhbat»…).
+ */
+export type LibraryVoice = { id: string; name: string; gender: VoiceGender; lang?: "uz"; note?: string; native?: true };
+
+const uz = (id: string, name: string, note: string): LibraryVoice => ({ id, name, gender: "male", lang: "uz", note, native: true });
+
+/**
+ * Native Uzbek voices of the ElevenLabs voice library (`GET /v1/shared-voices?language=uz`, production 2026-11-12; the
+ * provider's own descriptions → the Uzbek note). JaysonKhan, Shohjahon and Mirzabek are `free_users_allowed: false`,
+ * which does not concern the paid Creator key. Davronbek (the most used one) is the default Uzbek voice.
+ */
+export const ELEVENLABS_UZBEK_VOICES: readonly LibraryVoice[] = [
+  uz("agoC45V78njTIxYzwmSb", "Davronbek", "Jurnalist, salobatli"),
+  uz("AgD9yC0DyOI1g9AP3l45", "Javohir", "Sokin, tabiiy"),
+  uz("ehTFHBkERkWR22A3sR8M", "JaysonKhan", "Ta’limiy"),
+  uz("tQBN3grEhnGrrqn0n2Rw", "Samariddin Siroj", "Suhbat"),
+  uz("cfWx14ZbaEUT4BjIA5tH", "Mirjalol", "Diktor, ishonchli"),
+  uz("tsHbvXAh0M61xzsgDqlk", "Firdavs Urinov", "Diktor"),
+  uz("1xZ621W54CwGT3dITE48", "Bahriddin", "Ma’lumot beruvchi"),
+  uz("nXdUXfIGcAbTyJ2kC04t", "Abror", "Kitob va darslik"),
+  uz("GChwNsPvTsqD6tAAORVU", "Shohjahon", "Ta’limiy, tarix"),
+  uz("CBeZJ4EnTnrJmhtlMCNC", "Sodiqjon", "Suhbat, erkin"),
+  uz("rwtcHtZgYU6HN2zLNBlf", "Sarhad Siz", "Diktor, aniq"),
+  uz("fytsqG6MLzC2aCSw7MLa", "Asilbek", "Reklama"),
+  uz("RaNVfTYq3HYeFPLng6XN", "Mirzaev", "Samimiy suhbat"),
+  uz("GcnlXfqDudh5dSQpZVll", "Mirzabek", "Qat’iy, talabchan"),
+];
 
 /** ElevenLabs default voices (public premade ids; Rachel / Adam are the podcast's premium voices). */
-export const ELEVENLABS_VOICES: readonly LibraryVoice[] = [
+const ELEVENLABS_PREMADE_VOICES: readonly LibraryVoice[] = [
   { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", gender: "female" },
   { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", gender: "female" },
   { id: "FGY2WhTYpPnrIDTdsKH5", name: "Laura", gender: "female" },
@@ -84,11 +129,47 @@ export const ELEVENLABS_VOICES: readonly LibraryVoice[] = [
 ];
 
 /**
+ * Every ElevenLabs library voice the direct models speak: the premade ones (first — the voice changer's default and
+ * older indices) then the native Uzbek ones. The lists show native voices first (`uzbekFirst`).
+ */
+export const ELEVENLABS_VOICES: readonly LibraryVoice[] = [...ELEVENLABS_PREMADE_VOICES, ...ELEVENLABS_UZBEK_VOICES];
+
+const voiceId = (name: string): string => {
+  const v = ELEVENLABS_VOICES.find((x) => x.name === name);
+  if (!v) throw new Error(`catalog-speech: no voice ${name}`);
+  return v.id;
+};
+/** Default voices of the direct ElevenLabs models: native Uzbek for Uzbek text, else the premade pair. */
+export const ELEVENLABS_DEFAULT_VOICES = {
+  uz: [voiceId("Davronbek"), voiceId("Javohir")],
+  other: [voiceId("Rachel"), voiceId("Adam")],
+} as const;
+
+/** The default voice of speaker `index` (0 or 1) for a text language (`lang` param; blank = Uzbek, the default). */
+export function defaultElevenVoice(lang: unknown, index = 0): string {
+  const l = String(lang ?? "").trim().toLowerCase();
+  const pair = !l || l === "uz" ? ELEVENLABS_DEFAULT_VOICES.uz : ELEVENLABS_DEFAULT_VOICES.other;
+  return pair[index === 1 ? 1 : 0];
+}
+
+/** Native voices first, the others after, each group in its listed order. */
+export function uzbekFirst<T extends Pick<LibraryVoice, "native">>(list: readonly T[]): T[] {
+  return [...list.filter((v) => v.native), ...list.filter((v) => !v.native)];
+}
+
+/**
+ * The library voices the voice changer (speech-to-speech, `eleven_multilingual_sts_v2`) offers: the premade ones only.
+ * UNVERIFIED whether speech-to-speech takes a shared-library voice that is not in the account (only text-to-speech and
+ * text-to-dialogue were tested, 2026-11-12) — the native Uzbek voices stay out of it until a live test says so.
+ */
+export const ELEVENLABS_STS_VOICES: readonly LibraryVoice[] = ELEVENLABS_PREMADE_VOICES;
+
+/**
  * The library voices fal's ElevenLabs models can speak: those both pages name, by name (Rachel is their default). Adam is in
  * neither list, and a user's clone lives in an account fal does not reach. Those two pages say nothing on other voices.
  */
 const FAL_ELEVEN_VOICE_NAMES: ReadonlySet<string> = new Set(["Rachel", "Sarah", "Laura", "Alice", "Matilda", "George", "Brian", "Daniel", "Liam"]);
-export const FAL_ELEVEN_VOICES: readonly LibraryVoice[] = ELEVENLABS_VOICES.filter((v) => FAL_ELEVEN_VOICE_NAMES.has(v.name));
+export const FAL_ELEVEN_VOICES: readonly LibraryVoice[] = ELEVENLABS_PREMADE_VOICES.filter((v) => FAL_ELEVEN_VOICE_NAMES.has(v.name));
 
 /** Gemini prebuilt voices (language-neutral; `Kore` / `Charon` are the podcast's female / male voices). */
 export const GEMINI_VOICES: readonly LibraryVoice[] = [
@@ -116,7 +197,7 @@ export function cloneIdOf(voice: unknown): string | null {
   return UUID_RE.test(id) ? id : null;
 }
 
-/** eleven_v3 languages of our 18 (`lib/generation/tts/elevenlabs.ts V3_LANGS`, a test keeps them equal). */
+/** Languages of our 18 sent as `language_code` (`lib/generation/tts/elevenlabs.ts ELEVENLABS_LANG_CODES`, a test keeps them equal). */
 export const ELEVENLABS_LANGS: readonly { value: string; label: string }[] = [
   { value: "uz", label: "O‘zbekcha" },
   { value: "ru", label: "Ruscha" },
@@ -168,7 +249,7 @@ const textParam = (name: string, label: string, max: number): ParamSchema => ({ 
 
 const langParam: ParamSchema = { name: "lang", label: "Til", hint: "Matn tili", type: "enum", options: ELEVENLABS_LANGS, default: "uz", affects: "request", advanced: true };
 
-/** «Kayfiyat»: eleven_v3 stability — Creative 0 / Natural 0.5 / Robust 1 (lower = wider emotional range). */
+/** «Kayfiyat»: ElevenLabs stability — Creative 0 / Natural 0.5 / Robust 1 (lower = wider emotional range). */
 const moodParam: ParamSchema = {
   name: "stability",
   label: "Kayfiyat",
@@ -224,12 +305,13 @@ export const STUDIO_SPEECH_ENTRIES: readonly CatalogEntry[] = [
     id: "elevenlabs/eleven-v3",
     kind: "speech",
     capabilities: ["tts"],
-    label: "ElevenLabs v3",
+    // Id kept for persisted rows (file header); the model is eleven_v4.
+    label: "ElevenLabs v4",
     maker: "ElevenLabs",
     badges: ["sifatli"],
-    params: [textParam("text", "Matn", STUDIO_SPEECH_MAX_CHARS), elevenVoice("voice", "Ovoz", ELEVENLABS_VOICES[0]!.id), speedParam, moodParam, langParam],
+    params: [textParam("text", "Matn", STUDIO_SPEECH_MAX_CHARS), elevenVoice("voice", "Ovoz", defaultElevenVoice("uz")), speedParam, moodParam, langParam],
     cost: { per: "kchar", usd: elevenLabsUsdPerKchar(), textParam: "text" },
-    routes: [{ provider: "elevenlabs", upstreamModel: ELEVENLABS_V3_MODEL, adapter: "studio-elevenlabs-tts" }],
+    routes: [{ provider: "elevenlabs", upstreamModel: ELEVENLABS_DIRECT_MODEL, adapter: "studio-elevenlabs-tts" }],
     limits: TIMEOUT,
     output: AUDIO_OUT,
   },
@@ -270,13 +352,13 @@ export const STUDIO_SPEECH_ENTRIES: readonly CatalogEntry[] = [
     badges: ["sifatli"],
     params: [
       textParam("script", "Suhbat matni", ELEVENLABS_DIALOGUE_MAX_CHARS),
-      elevenVoice("voice1", "1-ovoz", ELEVENLABS_VOICES[0]!.id),
-      elevenVoice("voice2", "2-ovoz", ELEVENLABS_VOICES[5]!.id),
+      elevenVoice("voice1", "1-ovoz", defaultElevenVoice("uz", 0)),
+      elevenVoice("voice2", "2-ovoz", defaultElevenVoice("uz", 1)),
       moodParam,
       langParam,
     ],
     cost: { per: "kchar", usd: elevenLabsUsdPerKchar(), textParam: "script" },
-    routes: [{ provider: "elevenlabs", upstreamModel: ELEVENLABS_V3_MODEL, adapter: "studio-elevenlabs-dialogue" }],
+    routes: [{ provider: "elevenlabs", upstreamModel: ELEVENLABS_DIRECT_MODEL, adapter: "studio-elevenlabs-dialogue" }],
     limits: TIMEOUT,
     output: AUDIO_OUT,
   },
@@ -312,7 +394,7 @@ export const STUDIO_SPEECH_ENTRIES: readonly CatalogEntry[] = [
   },
 ];
 
-/** Order = the picker's order; ElevenLabs v3 (the Uzbek-listed model) first, Gemini the cheaper alternative. */
+/** Order = the picker's order; ElevenLabs v4 (the Uzbek model) first, Gemini the cheaper alternative. */
 export const STUDIO_SPEECH_PURPOSE_SPEC: PurposeSpec = {
   id: STUDIO_SPEECH_PURPOSE,
   kind: "speech",

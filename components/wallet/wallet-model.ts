@@ -7,13 +7,21 @@ import { DAILY_QUIZ_NOTE } from "@/lib/daily-quiz/rules";
 import { PAYMENT_BONUS_NOTE_PREFIX } from "@/lib/payment-bonus";
 import { AMBASSADOR_NOTE_PREFIX } from "@/lib/ambassador";
 
-/** What a top-up buys (the copy `PurchasePage` has shown since AUDIT-12). */
-export const TOPUP_FEATURES = [
-  "Har bir hujjat narxi yaratishdan oldin ko'rsatiladi",
-  "Hujjat yaratilmasa, pul to'liq qaytariladi",
-  "Click yoki Payme orqali xavfsiz to'lov",
-  "Balans muddatsiz saqlanadi",
-] as const;
+/**
+ * What a top-up buys (the copy `PurchasePage` has shown since AUDIT-12). The provider line names only
+ * the providers the server has switched on («Click, Paynet yoki Payme orqali xavfsiz to'lov»); none → no line.
+ */
+export function topupFeatures(payments: { click?: boolean; paynet?: boolean; payme?: boolean } | null | undefined): string[] {
+  const names = [payments?.click && "Click", payments?.paynet && "Paynet", payments?.payme && "Payme"].filter((n): n is string => !!n);
+  const providers =
+    names.length > 1 ? `${names.slice(0, -1).join(", ")} yoki ${names[names.length - 1]}` : (names[0] ?? null);
+  return [
+    "Har bir hujjat narxi yaratishdan oldin ko'rsatiladi",
+    "Hujjat yaratilmasa, pul to'liq qaytariladi",
+    ...(providers ? [`${providers} orqali xavfsiz to'lov`] : []),
+    "Balans muddatsiz saqlanadi",
+  ];
+}
 
 const MONTHS = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr"];
 /** Tashkent is UTC+5 all year (no DST) — by hand, like `formatJoinDate`: ICU data differs between Node and browsers. */

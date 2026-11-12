@@ -120,12 +120,17 @@ test("Hamyon: to'lov faqat purpose=topup buyurtma yaratadi (tanlangan summa bila
   });
   const dialog = screen.getByRole("dialog");
   assert.doesNotMatch(dialog.textContent ?? "", FORBIDDEN);
-  assert.ok(dialog.querySelector("fieldset"), "summa tanlash har doim ko'rinadi");
+  // Owner 2026-11-12: usul tanlanadi, keyin summa (bo'sh) — tez tanlash tugmasi uni to'ldiradi.
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: `${groupDigits(50_000)} so'm` })); // redesign W5: was «50k»
+    fireEvent.click(dialog.querySelector('[data-pay-method="click"]')!);
+  });
+  assert.ok(dialog.querySelector("[data-pay-amount-input]"), "summa qadami");
+  assert.doesNotMatch(screen.getByRole("dialog").textContent ?? "", FORBIDDEN);
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: `${groupDigits(50_000)} so'm` }));
   });
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Click" }));
+    fireEvent.click(screen.getByRole("button", { name: "Davom etish" }));
     await new Promise((r) => setImmediate(r));
   });
   assert.equal(captured.length, 1);

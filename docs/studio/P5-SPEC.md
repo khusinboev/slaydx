@@ -29,23 +29,63 @@ P1 (Studio shell, cost × markup), P3 (tab bar). Owner decisions 2026-11-02 are 
 ## Models, endpoints, prices (read 2026-11-02; so'm at ×2, 12 700 so'm/$)
 | Catalog id | Endpoint | Params (each changes request or price: probe test) | USD | so'm |
 |---|---|---|---|---|
-| `elevenlabs/eleven-v3` (default) | `POST /v1/text-to-speech/{voice}?output_format=mp3_44100_128`, `model_id: eleven_v3` | text ≤ 4 000, voice (library or own clone), speed 0.8–1.2 (`voice_settings.speed`), Kayfiyat = stability 0 / 0.5 / 1, language (16 of our 18) | 0.1818 / 1 000 chars (Creator plan) | 1 000 chars 4 700 · 140 chars 700 |
+| `elevenlabs/eleven-v3` (default; label «ElevenLabs v4», id kept — see below) | `POST /v1/text-to-speech/{voice}?output_format=mp3_44100_128`, `model_id: eleven_v4` (since 2026-11-12) | text ≤ 4 000 (one v4 request ≤ 10 000), voice (library incl. 14 native Uzbek, or own clone), speed 0.8–1.2 (`voice_settings.speed`), Kayfiyat = stability 0 / 0.5 / 1, language (16 of our 18) | 0.1818 / 1 000 chars (Creator plan) | 1 000 chars 4 700 · 140 chars 700 |
 | `google/gemini-tts` | existing Gemini TTS adapter (`TTS_GEMINI_MODEL`, ≤ 1 400 chars per call, chunks joined) | text, voice (12 prebuilt) | 0.016833 / 1 000 chars (quote) | 1 000 chars 500 |
-| `elevenlabs/v3-dialogue` | `POST /v1/text-to-dialogue`, `{inputs:[{text, voice_id}], model_id: eleven_v3, settings:{stability}}` | script ≤ 2 000 («Ism: gap» lines, 2 speakers), voice1, voice2, Kayfiyat, language | 0.1818 / 1 000 chars | as v3 |
+| `elevenlabs/v3-dialogue` (id kept) | `POST /v1/text-to-dialogue`, `{inputs:[{text, voice_id}], model_id: eleven_v4, settings:{stability}}` | script ≤ 2 000 («Ism: gap» lines, 2 speakers), voice1, voice2, Kayfiyat, language | 0.1818 / 1 000 chars | as v4 |
 | `google/gemini-dialogue` | Gemini multi-speaker (`multiSpeakerVoiceConfig`, one call) | script ≤ 1 400, voice1, voice2 | 0.016833 / 1 000 chars | as Gemini |
 | `elevenlabs/voice-clone` | `POST /v1/voices/add` (multipart `name`, `files`, `remove_background_noise=false`) → `voice_id`; `DELETE /v1/voices/{id}`; slots `GET /v1/user/subscription` (`voice_slots_used`, `voice_limit`) | name, sample | no per-call price | fixed 5 000 |
 
 **ElevenLabs cost basis (owner decision 2026-11-02):** the REAL plan cost — Creator $22 / 121 000 credits, 1 credit per
-eleven_v3 character → $22 / 121 000 × 1 000 ≈ $0.1818 per 1 000 characters (`ELEVENLABS_CREATOR_USD_PER_M_CHARS` in
+character (v3, kept for v4 — see below) → $22 / 121 000 × 1 000 ≈ $0.1818 per 1 000 characters (`ELEVENLABS_CREATOR_USD_PER_M_CHARS` in
 `lib/generation/llm-pricing.ts` `TTS_PRICING`, which the Studio catalog reads). The same row is the podcast / greeting
 premium voice's COST telemetry (now truthful in admin cost reports); their PRICE (`PREMIUM_VOICE_SOUM_PER_MIN`) is
 unchanged. The $0.08 API list price is not what the owner pays.
 
 Sources: https://elevenlabs.io/pricing/api (v3 list price $0.08 / 1K chars), https://elevenlabs.io/pricing (Starter $6 / 30 000
 credits, 10 custom voice slots; Creator $22 / 121 000, 30 slots), https://elevenlabs.io/docs/overview/models (eleven_v3:
-Uzbek, 5 000 chars / request), https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert (≤ 2 000 chars, ≤ 10
+Uzbek, 5 000 chars / request — true on 2026-11-02, FALSE by 2026-11-12, see «ElevenLabs v4»), https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert (≤ 2 000 chars, ≤ 10
 voices), …/voices/ivc/create, …/voices/delete, …/user/subscription/get, …/text-to-speech/convert (voice_settings).
 Gemini: `TTS_PRICING` Flash TTS row ($10 / 1M audio tokens, 25 tokens / s) at an assumed 15 chars / s.
+
+## ElevenLabs v4 and the Uzbek voices (2026-11-12, branch `fix/elevenlabs-v4-uzbek`)
+Measured LIVE on production by the lead (2026-11-12):
+- `GET /v1/models`: `eleven_v4` (TTS, 10 000 chars / request, cost multiplier 1, 94 languages incl. `uz`), `eleven_v4_turbo`
+  (10 000, multiplier 0.5, `uz`), `eleven_v3` (5 000, multiplier 1, 74 languages, **no `uz`**), `eleven_v3_conversational` (0.5, no `uz`).
+- `eleven_v3` + `language_code: "uz"` → 400 `{"detail":{"code":"invalid_parameters","message":"Model 'eleven_v3' does not support
+  language_code 'uz'.","status":"unsupported_language"}}`, text-to-speech and text-to-dialogue alike. The only direct
+  `elevenlabs/eleven-v3` Studio job ever run (2026-11-06) failed with exactly this — the Studio ElevenLabs voice, the clone
+  job's preview, library previews and the podcast / greeting «Premium ovoz» (which also sent v3 + `uz`) could not work for Uzbek.
+- `eleven_v4` + `uz`: single voice (Rachel too) and dialogue 200 OK; `voice_settings {speed, stability}` accepted. v3 WITHOUT
+  `language_code` still 200.
+- Shared voice-library voices are used by id in text-to-speech and text-to-dialogue WITHOUT adding them to the account (no voice
+  slot): 200 OK; all `category: professional`, `rate: 1` (no surcharge), verified for the v4 family only.
+- Pricing page: v4 $0.08 / 1 000 chars, v4 Turbo $0.04, v3 $0.08. Creator plan now shows 131 000 credits; a 160-character v4
+  request reported `character-cost: 71`. The cost basis stays the conservative 1 credit per character of the 121 000-credit plan
+  (one sample is no rate; user prices unchanged).
+
+What changed:
+- Every DIRECT ElevenLabs TTS / dialogue call sends `model_id: eleven_v4` (`ELEVENLABS_MODEL` in `lib/generation/tts/elevenlabs.ts`,
+  `ELEVENLABS_DIRECT_MODEL` in `catalog-speech.ts`, a test keeps them equal). The fal-routed ElevenLabs models are untouched.
+- **Catalog ids kept** (`elevenlabs/eleven-v3`, `elevenlabs/v3-dialogue`): they are persisted in `media_jobs.model_id`,
+  `doc_json.speech.model`, the «Media modellari» switches (migration 066) and per-model price overrides; a new id would orphan
+  them (and need a data migration) while nothing reads the id as a model version. Only the label says «ElevenLabs v4».
+- `language_code` is sent for the same 16 of our 18 languages as before (`uz` verified on v4; the others are the old list); a
+  400 `unsupported_language` is retried ONCE without `language_code` (the model detects the language) — Studio
+  (`elevenLabsFetch`) and podcast (`makeElevenLabsTts`) alike.
+- One Studio call takes up to 10 000 characters (`speechChunkLimit`); the user-facing text cap stays 4 000 (`MAX_FIELD`).
+- **14 native Uzbek voices** (`ELEVENLABS_UZBEK_VOICES`, `GET /v1/shared-voices?language=uz`, all male — the library has no
+  female native-Uzbek voice): Davronbek (default, journalist), Javohir, JaysonKhan, Samariddin Siroj, Mirjalol, Firdavs Urinov,
+  Bahriddin, Abror, Shohjahon, Sodiqjon, Sarhad Siz, Asilbek, Mirzaev, Mirzabek. The «Ovoz» list shows them first under
+  «O'zbek tilidagi ovozlar» with an «O'zbekcha» badge and a style note, then «Boshqa ovozlar»; «Ayol» says in one line that
+  the female voices read Uzbek with a slight foreign accent. Default voices: Uzbek text → Davronbek (dialogue: + Javohir), any
+  other language → Rachel (+ Adam).
+- Not offered to the voice changer (speech-to-speech: untested with a voice outside the account) nor to fal (voices by name).
+- Previews: the cache key is `elevenlabs:<voice id>` (nothing model-specific). Every library / clone preview was spoken with
+  v3 + `uz` (`extra.lang = "uz"`), and a failed preview is never stored (`storePreview` runs only after an MP3 came back). If v3
+  refused `uz` for the whole life of the tab, no `elevenlabs:*` / `clone:*` row exists; a row that does exist was made while v3
+  still took `uz` (real Uzbek audio, only an older model). Nothing is invalidated in code; the lead checks
+  `SELECT voice_key, created_at FROM studio_voice_previews WHERE voice_key NOT LIKE 'gemini:%'` and may delete those rows to
+  re-record them with v4.
 
 ## Voice cloning (owner 2026-11-02)
 - **Sample**: `POST /api/media/voices/samples` — `file` + `consent=1` (mandatory «Bu ovozdan foydalanishga haqqim bor»).
@@ -109,5 +149,6 @@ studio-admin-media, admin-migrations, ui/studio-page, ui/studio-video, ui/shell-
 5. **Voice Design** (text → voice) not built: it costs preview characters, saving a designed voice takes a scarce slot
    (Starter: 10), and the pricing is not on the API price page.
 6. «AI bilan yozish» not built (no free-LLM text writer endpoint for this; a P5.1 item).
-7. ElevenLabs v4 (`eleven_v4`, Uzbek, $0.08) exists now; the owner decided v3 — switching is one catalog line.
-8. No live provider call was made (no keys here).
+7. DONE 2026-11-12: the direct ElevenLabs calls run `eleven_v4` (v3 refuses `uz`, measured live) — section «ElevenLabs v4 and the Uzbek voices».
+8. No live provider call was made from the dev machine (no keys here); the 2026-11-12 facts above were measured by the lead on production.
+9. UNVERIFIED: speech-to-speech with a shared-library voice; `language_code` for the 15 non-Uzbek codes on v4 (the retry covers a refusal).

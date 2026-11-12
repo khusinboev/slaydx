@@ -54,7 +54,7 @@ const audioResponse = () => new Response(Buffer.from(mp3Bytes()), { status: 200,
 
 /* ══════════════════════════ request / response ══════════════════════════ */
 
-test("request shape: POST /v1/text-to-speech/{voice}?output_format=mp3_44100_128, xi-api-key header, eleven_v3 body", async () => {
+test("request shape: POST /v1/text-to-speech/{voice}?output_format=mp3_44100_128, xi-api-key header, eleven_v4 body", async () => {
   const { fetchImpl, seen } = stubFetch(() => audioResponse());
   const tts = makeElevenLabsTts({ fetchImpl, key: () => KEY });
   await tts.synthesize("Salom dunyo", { lang: "uz", voice: "voice/with space" });
@@ -65,14 +65,15 @@ test("request shape: POST /v1/text-to-speech/{voice}?output_format=mp3_44100_128
   const headers = init.headers as Record<string, string>;
   assert.equal(headers["xi-api-key"], KEY, "MUTATSIYA: header olib tashlansa qizaradi");
   assert.equal(headers["Content-Type"], "application/json");
-  assert.deepEqual(JSON.parse(String(init.body)), { text: "Salom dunyo", model_id: "eleven_v3", language_code: "uz" });
-  assert.equal(ELEVENLABS_MODEL, "eleven_v3");
+  // Live 2026-11-12: eleven_v3 + uz = 400 unsupported_language; eleven_v4 + uz = 200.
+  assert.deepEqual(JSON.parse(String(init.body)), { text: "Salom dunyo", model_id: "eleven_v4", language_code: "uz" });
+  assert.equal(ELEVENLABS_MODEL, "eleven_v4");
   assert.equal(ELEVENLABS_OUTPUT_FORMAT, "mp3_44100_128");
   assert.ok(!url.includes(KEY) && !String(init.body).includes(KEY), "the key is in the header only");
 });
 
 test("body: language_code only for a language the model lists; speed -> voice_settings clamped to 0.7..1.2", () => {
-  assert.equal(elevenLabsBody("x", { lang: "kaa" }).language_code, undefined, "Karakalpak is not an eleven_v3 language");
+  assert.equal(elevenLabsBody("x", { lang: "kaa" }).language_code, undefined, "Karakalpak gets no language_code (the model detects it)");
   assert.equal(elevenLabsBody("x", { lang: "RU" }).language_code, "ru");
   assert.equal(elevenLabsBody("x", { lang: "uz" }).voice_settings, undefined, "pace 1 sends no voice_settings");
   assert.deepEqual(elevenLabsBody("x", { lang: "uz", speed: 1.1 }).voice_settings, { speed: 1.1 });
@@ -87,7 +88,7 @@ test("audio bytes: the response body is returned as MP3 with a measured length a
   assert.deepEqual(audio.mp3, mp3Bytes());
   assert.ok(audio.seconds > 0.05 && audio.seconds < 0.2, `3 frames = ~78 ms, got ${audio.seconds}`);
   assert.equal(audio.chars, 5);
-  assert.equal(audio.model, "eleven_v3");
+  assert.equal(audio.model, "eleven_v4");
 });
 
 test("a 200 that is not MP3 (an error page) is rejected, never passed on as a voice", async () => {
@@ -118,6 +119,35 @@ test("refusals: policy 400 / auth 401 are not retried; 429 and 5xx are; Retry-Af
     assert.equal(err.status, status);
     if (status === 429) assert.equal(err.retryAfterMs, 2000);
   }
+});
+
+/** The exact answer of `eleven_v3` + `language_code: "uz"` on production, 2026-11-12. */
+const UNSUPPORTED_LANG = JSON.stringify({ detail: { code: "invalid_parameters", message: "Model 'eleven_v3' does not support language_code 'uz'.", status: "unsupported_language" } });
+
+test("unsupported_language: retried ONCE without language_code, the rest of the body unchanged", async () => {
+  const { fetchImpl, seen } = stubFetch((n) => (n === 1 ? new Response(UNSUPPORTED_LANG, { status: 400 }) : audioResponse()));
+  const audio = await makeElevenLabsTts({ fetchImpl, key: () => KEY }).synthesize("Salom", { lang: "uz", voice: "v1", speed: 1.1 });
+  assert.ok(audio.seconds > 0);
+  assert.equal(seen.length, 2, "MUTATSIYA: qayta urinish olib tashlansa 1 ta so'rov va xato");
+  assert.deepEqual(JSON.parse(String(seen[0]!.init.body)), { text: "Salom", model_id: "eleven_v4", language_code: "uz", voice_settings: { speed: 1.1 } });
+  assert.deepEqual(JSON.parse(String(seen[1]!.init.body)), { text: "Salom", model_id: "eleven_v4", voice_settings: { speed: 1.1 } });
+  assert.equal(seen[1]!.url, seen[0]!.url);
+});
+
+test("unsupported_language: never more than one retry; other 400s and a body without language_code are not retried", async () => {
+  // Refused twice → the second refusal is the error (two requests, no loop).
+  const twice = stubFetch(() => new Response(UNSUPPORTED_LANG, { status: 400 }));
+  const err = await makeElevenLabsTts({ fetchImpl: twice.fetchImpl, key: () => KEY }).synthesize("Salom", { lang: "uz", voice: "v1" }).then(() => null, (e: unknown) => e);
+  assert.ok(err instanceof TtsError && err.status === 400 && err.retryable === false);
+  assert.equal(twice.seen.length, 2);
+  // A policy 400 is not a language problem.
+  const policy = stubFetch(() => new Response(JSON.stringify({ detail: { status: "content_against_policy" } }), { status: 400 }));
+  await assert.rejects(makeElevenLabsTts({ fetchImpl: policy.fetchImpl, key: () => KEY }).synthesize("Salom", { lang: "uz", voice: "v1" }), TtsError);
+  assert.equal(policy.seen.length, 1, "MUTATSIYA: har 400 qayta yuborilsa 2 bo'ladi");
+  // No language_code was sent (Karakalpak): nothing to drop, no retry.
+  const bare = stubFetch(() => new Response(UNSUPPORTED_LANG, { status: 400 }));
+  await assert.rejects(makeElevenLabsTts({ fetchImpl: bare.fetchImpl, key: () => KEY }).synthesize("Salom", { lang: "kaa", voice: "v1" }), TtsError);
+  assert.equal(bare.seen.length, 1);
 });
 
 test("key never reaches an error message or a log line (even when the provider echoes it)", async () => {
