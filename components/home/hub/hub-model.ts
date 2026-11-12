@@ -1,7 +1,8 @@
 /**
  * Pure part of the Bosh hub (docs/redesign/PLAN.md «Xizmatlar panjarasi»): the
- * greeting name, the promo banner's slides, the eight service cells, the
- * «Davom ettirish» rows and their status pill. No React, no store — unit-testable as is.
+ * greeting name, the promo banner's slides, the twelve service cells, the
+ * «Bepul xizmatlar» row, the «Davom ettirish» rows and their status pill. No
+ * React, no store — unit-testable as is.
  */
 import type { Features, ServerGeneration, ServerUser } from "@/lib/api-client";
 import { SERVICE_BY_ID, serviceVisible, type ServiceConfig } from "@/lib/services";
@@ -54,8 +55,9 @@ export type HomeCell = {
 
 /** The catalogue group the «O'yinlar» cell opens (`CreateGrid` reads `?group=`). */
 const GAMES_GROUP: ToolGroup = "oyinlar";
-/** Takes the «AI yordamchi» cell while that service is off: the grid never has a hole. */
-const CHAT_SUBSTITUTE: ToolId = "coursework";
+
+/** The free «Titul» tool (`basePrice: 0`): a banner slide and a card of the free row. */
+const TITUL: ToolId = "title-page";
 
 type SessionFeatures = Features | null | undefined;
 
@@ -82,21 +84,39 @@ function gamesCell(): HomeCell {
 }
 
 /**
- * The eight cells of the home grid, always eight, in the owner's order
- * (2026-11-06; 73 % of the work is slides, 91 % slide + mustaqil ish + referat).
- * A service behind a switch is replaced by a tool while the switch is off; a
- * tool without its provider key stays in place, disabled, as in the catalogue.
+ * What takes the place of a switched-off service, in this order (owner 2026-11-12): the first switched-off cell (in
+ * grid order) gets «O'yinlar», the next «Rezyume», then «Tarjimon», «Maqola». The grid never has a hole and never
+ * repeats a target.
+ */
+function fallbackCells(features: SessionFeatures): HomeCell[] {
+  return [gamesCell(), toolCell("resume", features), toolCell("translation", features), toolCell("article", features)];
+}
+
+/**
+ * The twelve cells of the home grid, always twelve, in the owner's order (2026-11-12): Slayd, Pro slayd, Mustaqil ish,
+ * Referat, Konspekt, Kurs ishi, Insho, Test ishlash, Studio, AI yordamchi, Qattiqqo'l domla, Barchasi. A service behind
+ * a switch (tests, chat, domla) is replaced by the next fallback (`fallbackCells`) while its switch is off; a tool
+ * without its provider key stays in place, disabled, as in the catalogue. «Barchasi» is always last.
  */
 export function homeCells(features: SessionFeatures): HomeCell[] {
-  const chat = SERVICE_BY_ID.chat;
+  const fallbacks = fallbackCells(features);
+  const gated = (service: ServiceConfig): HomeCell => ({
+    ...(serviceVisible(service, features) ? serviceCell(service) : fallbacks.shift()!),
+    flagged: true,
+  });
+  const { tests, chat, domla } = SERVICE_BY_ID;
   return [
     toolCell("slide", features),
+    toolCell("pro-slide", features),
     toolCell("mustaqil-ish", features),
     toolCell("referat", features),
+    toolCell("konspekt", features),
+    toolCell("coursework", features),
     toolCell("essay", features),
+    gated(tests),
     { id: STUDIO_ENTRY.id, href: STUDIO_ENTRY.href, label: STUDIO_ENTRY.title, icon: STUDIO_ENTRY.icon, tc: STUDIO_ENTRY.tc, blocked: null },
-    { ...(serviceVisible(chat, features) ? serviceCell(chat) : toolCell(CHAT_SUBSTITUTE, features)), flagged: true },
-    gamesCell(),
+    gated(chat),
+    gated(domla),
     { id: "all", href: "/uz/create", label: "Barchasi", icon: "layout-grid", tc: null, blocked: null },
   ];
 }
@@ -105,18 +125,42 @@ export function homeCells(features: SessionFeatures): HomeCell[] {
 export type HomeSlide = { id: string; href: string; title: string; promise: string; cta: string; icon: string };
 
 /**
- * The banner's slides. `marketOn` = `useMarketOn()`, the rule of the market's
- * own pages and rail; Studio has no switch, so the banner is never empty.
+ * The banner's slides, in the owner's order: market, titul, chat, tests, studio, domla. `marketOn` = `useMarketOn()`,
+ * the rule of the market's own pages and rail; Titul and Studio have no switch, so the banner is never empty.
  */
 export function homeSlides(features: SessionFeatures, marketOn: boolean): HomeSlide[] {
-  const { market, chat, domla } = SERVICE_BY_ID;
+  const { market, chat, tests, domla } = SERVICE_BY_ID;
+  const titul = TOOL_BY_ID[TITUL];
   const slides: (HomeSlide | false)[] = [
     marketOn && { id: market.id, href: market.href, icon: market.icon, title: "Ishlar bozori ochildi", promise: "Tayyor ishlar asl narxdan arzon", cta: "Bozorni ochish" },
-    { id: STUDIO_ENTRY.id, href: STUDIO_ENTRY.href, icon: STUDIO_ENTRY.icon, title: STUDIO_ENTRY.title, promise: "Eng kuchli modellar bilan rasm yarating", cta: "Studiyani ochish" },
+    { id: titul.id, href: toolHref(titul, features?.legacyFold), icon: titul.icon, title: "Titul varag‘i — bepul", promise: "Kurs ishi, diplom va mustaqil ish uchun tayyor titul", cta: "Titul yaratish" },
     serviceVisible(chat, features) && { id: chat.id, href: chat.href, icon: chat.icon, title: chat.title, promise: "Savol bering yoki hujjat buyuring · kuniga 10 ta tekin", cta: "Suhbatni boshlash" },
+    serviceVisible(tests, features) && { id: tests.id, href: tests.href, icon: tests.icon, title: tests.title, promise: tests.description, cta: "Testni boshlash" },
+    { id: STUDIO_ENTRY.id, href: STUDIO_ENTRY.href, icon: STUDIO_ENTRY.icon, title: STUDIO_ENTRY.title, promise: "Eng kuchli modellar bilan rasm yarating", cta: "Studiyani ochish" },
     serviceVisible(domla, features) && { id: domla.id, href: domla.href, icon: domla.icon, title: domla.title, promise: domla.description, cta: "Boshlash" },
   ];
   return slides.filter((s): s is HomeSlide => s !== false);
+}
+
+/** One compact card of the «Bepul xizmatlar» row. */
+export type HomeFreeItem = { id: string; href: string; title: string; promise: string; icon: string; tc: string };
+
+/**
+ * The «Bepul xizmatlar» row under the grid: Titul, AI yordamchi (only while `chat` is on), Fayl konvertatsiya and
+ * Alifbo o'giruvchi. Routes, names, icons and tints come from the tool / service registries; only the one-line
+ * promise is the row's own.
+ */
+export function homeFreeItems(features: SessionFeatures): HomeFreeItem[] {
+  const { chat, convert, alifbo } = SERVICE_BY_ID;
+  const titul = TOOL_BY_ID[TITUL];
+  const service = (s: ServiceConfig, promise: string): HomeFreeItem => ({ id: s.id, href: s.href, title: s.title, promise, icon: s.icon, tc: s.tc });
+  const items: (HomeFreeItem | false)[] = [
+    { id: titul.id, href: toolHref(titul, features?.legacyFold), title: titul.title, promise: "Titul varag‘ini 1 daqiqada", icon: titul.icon, tc: titul.tc },
+    serviceVisible(chat, features) && service(chat, "Kuniga 10 ta savol bepul"),
+    service(convert, "PDF, Word, rasm formatlari"),
+    service(alifbo, "Kirill ↔ lotin"),
+  ];
+  return items.filter((i): i is HomeFreeItem => i !== false);
 }
 
 export type FileTone = "ok" | "run" | "error" | "muted";

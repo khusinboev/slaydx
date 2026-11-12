@@ -6,21 +6,27 @@ import { cn } from "@/lib/cn";
 import type { HomeCell } from "./hub-model";
 import { HUB_ENTER, HUB_STAGGER_MS } from "./HubSection";
 
+/*
+ * `h-full`: a grid row stretches every `li` to its tallest cell, so a one-line label («Slayd») and a two-line one
+ * («Qattiqqo‘l domla») give cells of one height. `px-0.5` keeps the label box at ≥ 78 px on a 360 px phone.
+ */
 const CELL =
-  "focus-visible:ring-ring flex min-h-[5.75rem] flex-col items-center gap-1.5 rounded-2xl px-0.5 pt-2 pb-1.5 text-center outline-none focus-visible:ring-2";
+  "focus-visible:ring-ring flex h-full min-h-[5.75rem] flex-col items-center gap-1.5 rounded-2xl px-0.5 pt-2 pb-1.5 text-center outline-none focus-visible:ring-2";
 const TILE = "flex size-[3.25rem] shrink-0 items-center justify-center rounded-[16px]";
-const LABEL = "line-clamp-2 text-[13px] leading-tight break-words";
+/** Two lines at most; a long word wraps only where it has to, never clipped by a single-line truncate. */
+const LABEL = "line-clamp-2 w-full text-[13px] leading-tight break-words";
 
 /**
- * The service grid: four columns on a phone, eight in one row from 1024 px, one tap each (targets are ≥ 44 px). The
- * first cell (Slayd, 73 % of the work) has a ringed, stronger tile; its size is the others', so the grid keeps its
- * rhythm. A tool without its provider key is drawn disabled with the reason, as in the catalogue. Links keep the hub's
- * login gate. `pending` = the session is unknown: a cell that depends on a switch is a skeleton of the same size.
+ * The service grid: twelve cells, four columns × three rows on a phone, six × two from 1024 px, one tap each (targets
+ * are ≥ 44 px). The first cell (Slayd, 73 % of the work) has a ringed, stronger tile; its size is the others', so the
+ * grid keeps its rhythm. A tool without its provider key is drawn disabled with the reason, as in the catalogue. Links
+ * keep the hub's login gate. `pending` = the session is unknown: a cell that depends on a switch is a skeleton of the
+ * same size.
  */
 export function HubGrid({ cells, pending, onPick, index }: { cells: HomeCell[]; pending: boolean; onPick: (href: string) => void; index: number }) {
   return (
     <section aria-label="Xizmatlar" data-hub-section="grid" className={cn("min-w-0", HUB_ENTER)} style={{ animationDelay: `${index * HUB_STAGGER_MS}ms` }}>
-      <ul data-hub-grid className="grid grid-cols-4 gap-x-1 gap-y-2 lg:grid-cols-8">
+      <ul data-hub-grid className="grid grid-cols-4 gap-x-1 gap-y-2 lg:grid-cols-6">
         {cells.map((cell, i) => (
           <li key={cell.id} className="min-w-0">
             {pending && cell.flagged ? <CellSkeleton /> : <Cell cell={cell} primary={i === 0} onPick={onPick} />}
@@ -59,7 +65,9 @@ function Cell({ cell, primary, onPick }: { cell: HomeCell; primary: boolean; onP
       >
         {Icon ? <Icon className="size-6" aria-hidden /> : null}
       </span>
-      <span className={cn(LABEL, primary ? "font-bold" : "font-medium")}>{cell.label}</span>
+      <span className={cn(LABEL, primary ? "font-bold" : "font-medium")}>
+        {cell.label}
+      </span>
       {cell.blocked ? <span className="sr-only">{cell.blocked}</span> : null}
     </>
   );
