@@ -52,15 +52,16 @@ export const SLIDE_MAX = PRO_SLIDE_MAX;
 
 /**
  * Oddiy slayd: pro bilan BIR XIL slayder (4–30), lekin narx paket emas,
- * formula — `SLIDE_INCLUDED` (20) tagacha bitta narx, keyingi har slayd
- * `SLIDE_EXTRA_PRICE`. «Sifat / hajm» paketlari (standard/long/premium)
- * olib tashlangan (Formalar 2): 25 slayd = 5 500, 30 = 8 000.
+ * formula — `SLIDE_INCLUDED` (5) tagacha bitta narx, keyingi har slayd
+ * `SLIDE_EXTRA_PRICE` (egasi qarori 2026-11-12: «5 ta list 3 000 so'm, 6-listdan
+ * boshlab har biri 550 so'm»; ilgari 20 tagacha 3 000, keyin +500 edi):
+ * 10 slayd = 5 750, 20 = 11 250, 30 = 16 750.
  */
 export const SLIDE_MIN = PRO_SLIDE_MIN;
 export const SLIDE_DEFAULT = 10;
 export const SLIDE_BASE_PRICE = 3000;
-export const SLIDE_INCLUDED = 20;
-export const SLIDE_EXTRA_PRICE = 500;
+export const SLIDE_INCLUDED = 5;
+export const SLIDE_EXTRA_PRICE = 550;
 
 /** Oddiy slayd narxi — `priceFor` (server) va forma bitta formuladan. */
 export function slidePrice(count: number): number {
@@ -127,7 +128,7 @@ export const SLIDE_PARAMS: SlideParam[] = [
    * band soni deka TUZILMASINI ham o'zgartiradi — «beats» ta'siri.
    */
   { id: "planItems", tools: ["slide", "pro-slide"], encode: "number", probeA: 3, probeB: 6, impacts: ["prompt", "layout", "beats"] },
-  // 4 → 25: oddiyda narx 3 000 → 5 500, proda 8 000 → 50 000 — ikkalasida ham «price» farq qiladi.
+  // 4 → 25: plain price 3 000 → 14 000, pro 6 400 → 40 000 — «price» differs for both.
   { id: "slideCount", tools: ["slide", "pro-slide"], encode: "number", probeA: 4, probeB: 25, impacts: ["beats", "price"] },
   { id: "titleSlide", tools: ["slide", "pro-slide"], encode: "boolean", probeA: true, probeB: false, impacts: ["beats"] },
   { id: "agendaSlide", tools: ["slide", "pro-slide"], encode: "boolean", probeA: true, probeB: false, impacts: ["beats"] },

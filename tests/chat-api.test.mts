@@ -112,8 +112,8 @@ test("chat API routes", { skip }, async (t) => {
     const ok = await call(confirmRoute.POST, "/api/chat/confirm", "POST", owner.cookie, { token: card.token, hash: card.hash });
     assert.equal(ok.status, 202, JSON.stringify(ok.body));
     assert.equal(ok.body.status, "QUEUED");
-    assert.equal(ok.body.price, 3000);
-    assert.equal((await wallet(query, owner.uid)).total, 17_000);
+    assert.equal(ok.body.price, 5750); // 10 slides = 3 000 + 5 × 550
+    assert.equal((await wallet(query, owner.uid)).total, 14_250);
     const again = await call(confirmRoute.POST, "/api/chat/confirm", "POST", owner.cookie, { token: card.token, hash: card.hash });
     assert.equal(again.status, 409);
     assert.equal(again.body.code, "used");
@@ -137,7 +137,7 @@ test("chat API routes", { skip }, async (t) => {
     const card = r.reply.card as { token: string; hash: string };
     const short = await call(confirmRoute.POST, "/api/chat/confirm", "POST", u.cookie, { token: card.token, hash: card.hash });
     assert.equal(short.status, 402);
-    assert.equal(short.body.required, 3000);
+    assert.equal(short.body.required, 5750);
     assert.equal(short.body.available, 500);
     assert.equal(short.body.topUp, "https://slaydx.test/uz/wallet");
     assert.equal((await call(confirmRoute.POST, "/api/chat/confirm", "POST", u.cookie, { hash: card.hash })).status, 400);

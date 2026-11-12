@@ -11,6 +11,7 @@ import { effectivePrice } from "../pricing";
 import { getSetting } from "../settings";
 import { SIGNUP_BONUS_POINTS } from "../auth";
 import { chatTools, describeRule, paramHints } from "./toolspec";
+import { defaultSlideCount } from "../../generation/slide-params";
 
 /**
  * The assistant's product knowledge pack (owner request 8): GENERATED from code and settings at run time, never hand-written,
@@ -42,7 +43,10 @@ function priceAxis(tool: ToolConfig): { key: string; values: Array<string | numb
     if (rule.values) return { key: hint.key, values: rule.values.slice(0, 7) };
     if (rule.type === "number" && rule.min !== undefined && rule.max !== undefined) {
       const mid = Math.round((rule.min + rule.max) / 2);
-      return { key: hint.key, values: [...new Set([rule.min, mid, rule.max])] };
+      // Slide decks also quote the form's default count (10 / 12): the most common
+      // request, and the plain slide price is not flat below the middle of the range.
+      const def = hint.key === "slideCount" && (tool.id === "slide" || tool.id === "pro-slide") ? [defaultSlideCount(tool.id)] : [];
+      return { key: hint.key, values: [...new Set([rule.min, ...def, mid, rule.max])].sort((x, y) => x - y) };
     }
   }
   return null;

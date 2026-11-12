@@ -426,7 +426,7 @@ export function RangeRow({
   format?: (v: number) => string;
   /** `priceFor(tool, values)` natijasi — ko'rsatiladi, hisoblanmaydi. */
   price?: number;
-  /** Narx qoidasi izohi (masalan «20 tagacha 3 000 · keyingisi +500»). */
+  /** Narx qoidasi izohi (masalan «5 slaydgacha 3 000 so'm · 6-slayddan har biri +550 so'm»). */
   rule?: string;
 }) {
   return (

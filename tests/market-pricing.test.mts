@@ -127,7 +127,8 @@ test("defaults: 50 % of the tier's live price, rounded", { skip }, async () => {
   const { marketPriceForItem } = await import("../lib/server/market/pricing.ts");
   assert.deepEqual(await marketPriceForItem(await item("referat", { pages: "15-20" })), { price: 2000, originalPrice: 4000 });
   assert.deepEqual(await marketPriceForItem(await item("coursework", { pages: "40-45" })), { price: 12000, originalPrice: 24000 });
-  assert.deepEqual(await marketPriceForItem(await item("slide", { slideCount: 10 })), { price: 1500, originalPrice: 3000 });
+  // 10 slides = 3 000 + 5 × 550 = 5 750; 50 % = 2 875 → rounded to 500 = 3 000.
+  assert.deepEqual(await marketPriceForItem(await item("slide", { slideCount: 10 })), { price: 3000, originalPrice: 5750 });
 });
 
 test("once, not twice: a tool_pricing row moves the original, the market percent sits on top of it", { skip }, async () => {
@@ -155,7 +156,8 @@ test("per-tool: the tool's percent beats the global one and only for that tool; 
   await settings({ "market.percent": 40, "market.round_to": 100, "market.min_price": 500 });
   await transaction((c) => p.setToolPercentInTx(c, "slide", 70, null));
   p.invalidateMarketPricingCache();
-  assert.equal((await p.marketPriceForItem(await item("slide", { slideCount: 10 }))).price, 2100);
+  // 5 750 × 70 % = 4 025 → rounded to 100 = 4 000.
+  assert.equal((await p.marketPriceForItem(await item("slide", { slideCount: 10 }))).price, 4000);
   assert.equal((await p.marketPriceForItem(await item("referat", { pages: "10-15" }))).price, 1200);
   await settings({ "market.min_price": 5000 });
   assert.equal((await p.marketPriceForItem(await item("referat", { pages: "10-15" }))).price, 5000);

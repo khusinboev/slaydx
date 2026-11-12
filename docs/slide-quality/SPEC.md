@@ -60,7 +60,8 @@ Generation path only (`attachSlideImages(..., { hybrid })`); without the option 
 
 Settings (`lib/server/settings.ts`, admin tabs): `slide.image_ai_fallback` (bool, default on, «Funksiyalar»),
 `slide.image_ai_max` (0–30, default 4, «Navbat va generatsiya»; 0 = no AI) — 4 × $0.034 ≈ $0.14 stays under the
-plain deck price (3 000 so'm). Cost attribution: every call is recorded in the job's cost meter (`trackJobCost`
+cheapest plain deck price (3 000 so'm for 4–5 slides; since 2026-11-12 +550 per slide from the 6th, the default
+10 slides = 5 750). Cost attribution: every call is recorded in the job's cost meter (`trackJobCost`
 → `generations.cost_json` and an `ai_usage` row keyed by the generation and its `tool_id = slide`), so the admin cost
 report puts the spend on «Slayd»; only the media-core `media_jobs.purpose` label reads `proslide.illustration`.
 

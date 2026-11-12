@@ -12,7 +12,7 @@ import {
   PRO_MAIN_FIELD_ORDER_1,
   PRO_MAIN_FIELD_ORDER_2,
 } from "../../components/forms/ProSlideForm.tsx";
-import { SLIDE_PARAMS, PRO_SLIDE_DEFAULT, PRO_SLIDE_MIN, PRO_SLIDE_MAX, SLIDE_DEFAULT, SLIDE_MIN, SLIDE_MAX } from "../../lib/generation/slide-params.ts";
+import { SLIDE_PARAMS, PRO_SLIDE_DEFAULT, PRO_SLIDE_MIN, PRO_SLIDE_MAX, SLIDE_DEFAULT, SLIDE_INCLUDED, SLIDE_MIN, SLIDE_MAX } from "../../lib/generation/slide-params.ts";
 import { AUDIENCE_RULES } from "../../lib/generation/slide-audience.ts";
 import { SLIDE_BLOCKS } from "../../lib/generation/slide-blocks.ts";
 import { TOOL_BY_ID, priceFor } from "../../lib/tools.ts";
@@ -147,7 +147,12 @@ test("SlideForm: slaydlar soni slayderi (4–30) BOR, paketlar YO'Q, narx qoidas
   assert.ok(html.includes(`min="${SLIDE_MIN}"`) && html.includes(`max="${SLIDE_MAX}"`), "slayder chegarasi 4–30");
   assert.ok(html.includes(`value="${SLIDE_DEFAULT}"`), "standart 10 slayd");
   assert.ok(!html.includes("Sifat / hajm") && !html.includes("Premium"), "paketlar olib tashlangan");
-  assert.ok(html.includes(`20 tagacha ${esc(formatSom(3000))}`) && html.includes("+500"), "narx qoidasi ko'rinadi");
+  // The rule is derived from `priceFor`, so a hint that stops following the constants goes red.
+  const upTo = priceFor(slideTool, { slideCount: SLIDE_INCLUDED });
+  const step = priceFor(slideTool, { slideCount: SLIDE_INCLUDED + 1 }) - upTo;
+  const rule = `${SLIDE_INCLUDED} slaydgacha ${formatSom(upTo)} · ${SLIDE_INCLUDED + 1}-slayddan har biri +${formatSom(step)}`;
+  assert.ok(html.includes(esc(rule)), `narx qoidasi ko'rinadi: «${rule}»`);
+  assert.ok(html.includes(esc(`5 slaydgacha ${formatSom(3000)} · 6-slayddan har biri +${formatSom(550)}`)), "egasi qarori 2026-11-12: 5 tagacha 3 000, keyin +550");
   const expected = esc(formatSom(priceFor(slideTool, { slideCount: SLIDE_DEFAULT })));
   assert.ok(html.includes(expected), `standart narx «${expected}» ko'rinmayapti`);
   assert.ok(!html.includes("Rasm uslubi"), "oddiy slaydda rasm uslubi yo'q — bepul stock faqat foto");
