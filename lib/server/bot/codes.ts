@@ -1,8 +1,11 @@
 import { BOT_LANGUAGES, isProfileField, type BotLanguage, type FieldStepId, type ProfileField } from "../../profile/fields";
+import { isDownloadFormatId, type DownloadFormatId } from "../../downloads/formats";
+import { RATING_REASONS, type RatingReason } from "../../generation-rating";
 
 /**
  * Callback codes of the bot's inline buttons (≤ 64 bytes each — Telegram's
- * `callback_data` limit; the longest here is `p:e:organization`, 16 bytes).
+ * `callback_data` limit; the longest here is a work-rating reason on a
+ * transcript, `gr:r:<32 hex>:transcript-txt:d`, 53 bytes).
  * Short and positional; `parseCallback` is the only reader, and anything it
  * does not recognise is `{ kind: "unknown" }` (answered «eskirgan»).
  *
@@ -31,6 +34,12 @@ import { BOT_LANGUAGES, isProfileField, type BotLanguage, type FieldStepId, type
  *   m:o:<0|1>         «Mening ishlarim bozorga chiqmasin» on the profile card: the value to set
  *   l:m:<o>           language menu; o = where it came from (p profile, y help, n none)
  *   l:s:<lang>:<o>    set the language, then show screen `o`
+ *   gr:o:<g>:<f>      work rating (docs/ratings/GENERATION-RATING.md) under the owner's file message: show the
+ *                     1-5 star row; g = the generation id as 32 hex (no dashes), f = the download format the message
+ *                     carries (its «📤 Ulashish» button is rebuilt for it); ownership is checked in SQL
+ *   gr:s:<g>:<f>:<n>  rate n stars (1-5)
+ *   gr:r:<g>:<f>:<r>  the reason of a 1-3 star rating: d design, i images, t text, e errors, o other, x skip
+ *   gr:b:<g>:<f>      «‹ Orqaga»: the normal keyboard again
  *   n                 no-op (a label-only button)
  */
 
@@ -68,8 +77,25 @@ export const cb = {
   dqOff: () => "dq:off",
   dqOn: () => "dq:on",
   marketOptOut: (optOut: boolean) => `m:o:${optOut ? 1 : 0}`,
+  workRate: (generationId: string, format: DownloadFormatId) => `gr:o:${hex32(generationId)}:${format}`,
+  workStars: (generationId: string, format: DownloadFormatId, stars: number) => `gr:s:${hex32(generationId)}:${format}:${stars}`,
+  workReason: (generationId: string, format: DownloadFormatId, reason: RatingReason | null) =>
+    `gr:r:${hex32(generationId)}:${format}:${reason ? REASON_CODE[reason] : "x"}`,
+  workBack: (generationId: string, format: DownloadFormatId) => `gr:b:${hex32(generationId)}:${format}`,
   noop: () => "n",
 };
+
+/** One letter per reason in `gr:r:`; `x` = skip. */
+const REASON_CODE: Record<RatingReason, string> = { design: "d", images: "i", text: "t", errors: "e", other: "o" };
+const REASON_OF: Record<string, RatingReason> = Object.fromEntries(RATING_REASONS.map((r) => [REASON_CODE[r], r]));
+
+/** A generation UUID as 32 lowercase hex (the `shareQuery` encoding): 36 bytes would not leave room for the rest. */
+function hex32(uuid: string): string {
+  return uuid.replace(/-/g, "").toLowerCase();
+}
+
+const HEX32_RE = /^[0-9a-f]{32}$/;
+const dashed = (h: string): string => `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 
 export type Callback =
   | { kind: "profile" }
@@ -98,6 +124,10 @@ export type Callback =
   | { kind: "domlaStart"; generationId: string }
   | { kind: "domlaResume"; sessionId: string }
   | { kind: "marketOptOut"; optOut: boolean }
+  | { kind: "workRate"; generationId: string; format: DownloadFormatId }
+  | { kind: "workStars"; generationId: string; format: DownloadFormatId; stars: number }
+  | { kind: "workReason"; generationId: string; format: DownloadFormatId; reason: RatingReason | null }
+  | { kind: "workBack"; generationId: string; format: DownloadFormatId }
   | { kind: "noop" }
   | { kind: "unknown" };
 
@@ -165,6 +195,19 @@ export function parseCallback(data: string | undefined | null): Callback {
     case "m":
       if (parts.length === 3 && b === "o" && (c === "0" || c === "1")) return { kind: "marketOptOut", optOut: c === "1" };
       break;
+    case "gr": {
+      if (!HEX32_RE.test(c ?? "") || !isDownloadFormatId(d ?? "")) break;
+      const generationId = dashed(c!);
+      const format = d as DownloadFormatId;
+      const e = parts[4];
+      if (parts.length === 4 && b === "o") return { kind: "workRate", generationId, format };
+      if (parts.length === 4 && b === "b") return { kind: "workBack", generationId, format };
+      if (parts.length === 5 && b === "s" && /^[1-5]$/.test(e ?? "")) return { kind: "workStars", generationId, format, stars: Number(e) };
+      if (parts.length === 5 && b === "r" && e !== undefined && (e === "x" || Object.hasOwn(REASON_OF, e))) {
+        return { kind: "workReason", generationId, format, reason: e === "x" ? null : REASON_OF[e]! };
+      }
+      break;
+    }
     case "n":
       if (parts.length === 1) return { kind: "noop" };
       break;

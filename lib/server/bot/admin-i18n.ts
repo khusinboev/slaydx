@@ -102,6 +102,12 @@ const A = {
   "st.docsLine": { uz: "Bugun: <b>{today}</b> · 7 kun: <b>{week}</b>", ru: "Сегодня: <b>{today}</b> · 7 дней: <b>{week}</b>", en: "Today: <b>{today}</b> · 7 days: <b>{week}</b>" },
   "st.top": { uz: "Top vositalar (7 kun):", ru: "Топ инструментов (7 дней):", en: "Top tools (7 days):" },
   "st.none": { uz: "hali yo‘q", ru: "пока нет", en: "none yet" },
+  "st.ratings": {
+    uz: "Baholar (30 kun): o‘rtacha <b>{avg}</b> · {n} ta · ≤3: {low} ta",
+    ru: "Оценки (30 дней): в среднем <b>{avg}</b> · {n} шт. · ≤3: {low} шт.",
+    en: "Ratings (30 days): average <b>{avg}</b> · {n} · ≤3: {low}",
+  },
+  "st.ratingsNone": { uz: "Baholar (30 kun): hali yo‘q", ru: "Оценки (30 дней): пока нет", en: "Ratings (30 days): none yet" },
   "st.money": { uz: "Tushum (so‘m)", ru: "Выручка (сум)", en: "Revenue (UZS)" },
   "st.moneyLine": {
     uz: "Bugun: <b>{today}</b> ({todayN}) · 7 kun: <b>{week}</b> ({weekN})\n30 kun: <b>{month}</b> · to‘langan buyurtmalar: <b>{monthN}</b>",

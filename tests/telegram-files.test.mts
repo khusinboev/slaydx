@@ -24,6 +24,8 @@ const TOKEN = "123456:FAKE-files-token-never-sent";
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
 process.env.TELEGRAM_BOT_TOKEN = TOKEN;
 process.env.NEXT_PUBLIC_TELEGRAM_BOT = "slaydx_test_bot";
+// A non-public app URL: the owner's keyboard has no «✏️ Tahrirlash» web_app button here (that case: tests/work-rating-bot.test.mts).
+process.env.APP_URL = "http://localhost:3000";
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
 process.env.DATABASE_URL = process.env.DATABASE_URL || "postgres://unused/unused";
 const skip = hasDb ? false : "Postgres kerak (DATABASE_URL)";
@@ -36,6 +38,17 @@ type Produced = import("../lib/server/telegram-files.ts").ProducedFile;
 if (hasDb) await ensureMigrated();
 
 const PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+
+/**
+ * The keyboard of the copy in the owner's own bot chat on a non-public deployment (owner request
+ * 2026-11-12): «⭐ Baholash» (or «⭐ N/5») and, as before, «📤 Ulashish» naming the format.
+ */
+function ownerKb(gen: string, format = "native") {
+  const h = gen.replace(/-/g, "");
+  return {
+    inline_keyboard: [[{ text: "⭐ Baholash", callback_data: `gr:o:${h}:${format}` }], [{ text: "📤 Ulashish", switch_inline_query: `f_${h}_${format}` }]],
+  };
+}
 
 /* ───────────────────────────── fixtures ───────────────────────────── */
 
@@ -154,8 +167,9 @@ test("first save: one multipart upload into the user's own chat; file_id cached 
     document: { name: "Quyosh tizimi.pptx", type: PPTX, size: 4096 },
     caption: "<b>Quyosh &lt;tizimi&gt; &amp; &quot;yo‘ldoshlar&quot;</b>\nSlayd · SlaydX yordamida tayyorlandi",
     parse_mode: "HTML",
-    // Hotfix after e6383b9: the copy in the user's own bot chat carries «📤 Ulashish», not a link back to the bot.
-    reply_markup: JSON.stringify({ inline_keyboard: [[{ text: "📤 Ulashish", switch_inline_query: `f_${gen.replace(/-/g, "")}_native` }]] }),
+    // Hotfix after e6383b9: the copy in the user's own bot chat carries «📤 Ulashish», not a link back to the bot;
+    // since 2026-11-12 «⭐ Baholash» above it (no «✏️ Tahrirlash»: this deployment's URL is not public).
+    reply_markup: JSON.stringify(ownerKb(gen)),
     disable_content_type_detection: "true",
   });
   const row = await cached(gen);
@@ -184,9 +198,7 @@ test("second save after the debounce window: JSON resend by file_id, no bytes, n
   assert.equal(h.calls[1].json!.document, fileId);
   assert.equal(h.calls[1].json!.chat_id, u.telegramId);
   assert.equal(h.calls[1].json!.parse_mode, "HTML");
-  assert.deepEqual(h.calls[1].json!.reply_markup, {
-    inline_keyboard: [[{ text: "📤 Ulashish", switch_inline_query: `f_${gen.replace(/-/g, "")}_native` }]],
-  });
+  assert.deepEqual(h.calls[1].json!.reply_markup, ownerKb(gen));
   assert.equal((await cached(gen))!.saves, 2);
 });
 
@@ -651,9 +663,7 @@ test("upload of a pdf save: the Ulashish query names that format", { skip }, asy
   const gen = await mkGen(u.id);
   const h = harness({ file: { mime: "application/pdf", fileName: "Quyosh tizimi.pdf" } });
   await saveToBot(gen, u, "pdf", { ...h.deps, prepare: undefined });
-  assert.deepEqual(JSON.parse(String(h.calls[0].form!.reply_markup)), {
-    inline_keyboard: [[{ text: "📤 Ulashish", switch_inline_query: `f_${gen.replace(/-/g, "")}_pdf` }]],
-  });
+  assert.deepEqual(JSON.parse(String(h.calls[0].form!.reply_markup)), ownerKb(gen, "pdf"));
 });
 
 test("«Ulashish» that uploads first: the copy in the user's chat gets «📤 Ulashish», the prepared message keeps the url button", { skip }, async () => {
@@ -662,9 +672,7 @@ test("«Ulashish» that uploads first: the copy in the user's chat gets «📤 U
   const h = harness();
   await prepareShare(gen, u, "native", h.deps);
   assert.deepEqual(h.calls.map((c) => c.method), ["sendDocument", "savePreparedInlineMessage"]);
-  assert.deepEqual(JSON.parse(String(h.calls[0].form!.reply_markup)), {
-    inline_keyboard: [[{ text: "📤 Ulashish", switch_inline_query: `f_${gen.replace(/-/g, "")}_native` }]],
-  });
+  assert.deepEqual(JSON.parse(String(h.calls[0].form!.reply_markup)), ownerKb(gen));
   assert.deepEqual((h.calls[1].json!.result as Record<string, unknown>).reply_markup, {
     inline_keyboard: [[{ text: "SlaydX'da ochish", url: "https://t.me/slaydx_test_bot" }]],
   });

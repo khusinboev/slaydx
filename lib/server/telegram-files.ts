@@ -10,6 +10,9 @@ import { log } from "./log";
 import type { SessionUser } from "./session";
 import { PRODUCERS } from "./downloads/producers";
 import { callBot, isTransientBotFailure, type BotResult } from "./telegram";
+import { langOf, type Lang } from "./bot/i18n";
+import type { InlineMarkup } from "./bot/ui";
+import { editUrlFor, workKeyboard } from "./bot/work-rating";
 
 /**
  * «Saqlash» and «Ulashish» through the bot (docs/mobile/PLAN.md §4.4, R2 §3–§5).
@@ -213,18 +216,28 @@ export function parseShareQuery(q: string): { genId: string; format: DownloadFor
 }
 
 /**
- * Button under the copy saved into the user's OWN bot chat: a «SlaydX'da
- * ochish» link is useless there (the user is already in the bot), so it is
- * «📤 Ulashish», which opens the chat picker and types `@bot <shareQuery>`
- * there; the inline answer is the same file (hotfix after e6383b9).
+ * Buttons under the copy saved into the user's OWN bot chat (owner request
+ * 2026-11-12, `bot/work-rating.ts workKeyboard`):
+ *
+ *   [ ✏️ Tahrirlash (web_app, editable kinds on a public URL) | ⭐ Baholash ]
+ *   [ 📤 Ulashish ]
+ *
+ * A «SlaydX'da ochish» link is useless there (the user is already in the bot);
+ * «📤 Ulashish» opens the chat picker and types `@bot <shareQuery>` there, and
+ * the inline answer is the same file (hotfix after e6383b9). The keyboard is
+ * built fresh for every upload and resend — nothing about it is stored.
  */
-export function savedMarkup(genId: string, format: DownloadFormatId): { inline_keyboard: { text: string; switch_inline_query: string }[][] } {
-  return { inline_keyboard: [[{ text: "📤 Ulashish", switch_inline_query: shareQuery(genId, format) }]] };
+export function savedMarkup(
+  genId: string,
+  format: DownloadFormatId,
+  o: { lang?: Lang; editUrl?: string | null; stars?: number | null } = {},
+): InlineMarkup {
+  return workKeyboard({ generationId: genId, format, lang: o.lang ?? "uz", editUrl: o.editUrl ?? null, stars: o.stars ?? null });
 }
 
 type Presentation = {
   caption: string;
-  replyMarkup?: ReturnType<typeof backLinkMarkup> | ReturnType<typeof savedMarkup>;
+  replyMarkup?: ReturnType<typeof backLinkMarkup> | InlineMarkup;
 };
 
 /** First upload: multipart form for `sendDocument` / `sendAudio`. */
@@ -341,15 +354,22 @@ type GenRow = {
   media: string | null;
   file_id: string | null;
   saved_at: Date | null;
+  /** For the owner's keyboard: retention removed the files (no edit button), bot language, current stars. */
+  purged: boolean;
+  lang: string | null;
+  stars: number | null;
 };
 
 /** The generation (owner only) and its cached Telegram file for `format`. */
 async function loadRow(genId: string, userId: string, format: DownloadFormatId): Promise<GenRow> {
   const row = await queryOne<GenRow>(
     `SELECT g.status, g.topic, g.tool_id, g.file_name, g.file_version, g.doc_version,
-            tf.file_version AS tf_version, tf.media, tf.file_id, tf.saved_at
+            tf.file_version AS tf_version, tf.media, tf.file_id, tf.saved_at,
+            g.files_purged_at IS NOT NULL AS purged, u.language AS lang, r.stars
        FROM generations g
+       JOIN users u ON u.id = g.user_id
        LEFT JOIN telegram_files tf ON tf.generation_id = g.id AND tf.format = $3
+       LEFT JOIN generation_ratings r ON r.generation_id = g.id AND r.user_id = g.user_id
       WHERE g.id = $1 AND g.user_id = $2`,
     [genId, userId, format],
   );
@@ -404,9 +424,16 @@ function presentationOf(row: Pick<GenRow, "tool_id" | "topic" | "file_name">): P
   return { caption: buildCaption(title, toolLabel), replyMarkup: backLinkMarkup(botChatUrl()), title, toolLabel };
 }
 
-/** The copy in the owner's own bot chat: same caption, «📤 Ulashish» button. */
+/** The copy in the owner's own bot chat: same caption, «Tahrirlash» / «Baholash» / «📤 Ulashish» (`savedMarkup`). */
 function savedPresentation(row: GenRow, genId: string, format: DownloadFormatId): Presentation {
-  return { caption: presentationOf(row).caption, replyMarkup: savedMarkup(genId, format) };
+  return {
+    caption: presentationOf(row).caption,
+    replyMarkup: savedMarkup(genId, format, {
+      lang: langOf(row.lang),
+      editUrl: editUrlFor(genId, row.tool_id, row.purged),
+      stars: row.stars === null ? null : Number(row.stars),
+    }),
+  };
 }
 
 function chatOf(user: TelegramUser): string {

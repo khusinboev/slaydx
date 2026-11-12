@@ -167,8 +167,11 @@ test("save {format}: every format the sheet lists is produced, uploaded and cach
       assert.equal(h.calls[0].method, audio ? "sendAudio" : "sendDocument");
       assert.deepEqual(h.calls[0].form![audio ? "audio" : "document"], { name: `Suv aylanishi.${want.ext}`, type: want.mime }, `${m.tool} ${id}: the uploaded file`);
       assert.equal(h.calls[0].form!.chat_id, u.telegramId, "into the session user's own chat");
-      const markup = JSON.parse(String(h.calls[0].form!.reply_markup)) as { inline_keyboard: { switch_inline_query: string }[][] };
-      assert.equal(markup.inline_keyboard[0][0].switch_inline_query, shareQuery(gen, id), `${m.tool}: «📤 Ulashish» shares ${id}`);
+      const markup = JSON.parse(String(h.calls[0].form!.reply_markup)) as { inline_keyboard: { switch_inline_query?: string }[][] };
+      // Since 2026-11-12 «📤 Ulashish» is the keyboard's LAST row (under «⭐ Baholash» / «✏️ Tahrirlash»), and its only switch_inline_query.
+      const shares = markup.inline_keyboard.flat().filter((b) => b.switch_inline_query !== undefined);
+      assert.equal(shares.length, 1, `${m.tool}: one «📤 Ulashish»`);
+      assert.equal(markup.inline_keyboard.at(-1)![0]!.switch_inline_query, shareQuery(gen, id), `${m.tool}: «📤 Ulashish» shares ${id}`);
     }
     const rows = await cacheRows(gen);
     assert.deepEqual(rows.map((r) => r.format).sort(), [...offered].sort(), `${m.tool}: one cache row per (generation, format)`);

@@ -139,6 +139,9 @@ export function statsScreen(a: BotAdmin, s: BotStats): AdminScreen {
     `${at(l, "st.top")} ${
       s.docs.top.length ? s.docs.top.map((t, i) => `${i + 1}. ${esc(toolName(l, t.toolId))} — ${g(t.count)}`).join(" · ") : at(l, "st.none")
     }`,
+    s.ratings.count && s.ratings.average !== null
+      ? at(l, "st.ratings", { avg: s.ratings.average.toFixed(1), n: g(s.ratings.count), low: g(s.ratings.low) })
+      : at(l, "st.ratingsNone"),
     "",
     `${tgEmoji("money")} <b>${at(l, "st.money")}</b>`,
     at(l, "st.moneyLine", {

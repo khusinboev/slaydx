@@ -73,7 +73,9 @@ export type InlineAction =
   | { callback_data: string }
   | { web_app: { url: string } }
   | { url: string }
-  | { copy_text: { text: string } };
+  | { copy_text: { text: string } }
+  /** Opens the chat picker and types `@bot <query>` there (the file message's «📤 Ulashish»). */
+  | { switch_inline_query: string };
 
 export type InlineButton = { text: string; icon_custom_emoji_id?: string; style?: ButtonStyle } & InlineAction;
 

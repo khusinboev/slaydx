@@ -413,6 +413,31 @@ const T = {
   "toast.start": { uz: "Avval /start bosing", ru: "Сначала нажмите /start", en: "Send /start first" },
   "toast.old": { uz: "Bu tugma eskirgan", ru: "Эта кнопка устарела", en: "This button is out of date" },
 
+  /* ── Work rating under the file message (docs/ratings/GENERATION-RATING.md; every key starts with `wr.`) ── */
+  "wr.edit": { uz: "✏️ Tahrirlash", ru: "✏️ Редактировать", en: "✏️ Edit" },
+  "wr.rate": { uz: "⭐ Baholash", ru: "⭐ Оценить", en: "⭐ Rate" },
+  "wr.rated": { uz: "⭐ {n}/5", ru: "⭐ {n}/5", en: "⭐ {n}/5" },
+  "wr.share": { uz: "📤 Ulashish", ru: "📤 Поделиться", en: "📤 Share" },
+  "wr.star": { uz: "{n}⭐", ru: "{n}⭐", en: "{n}⭐" },
+  "wr.back": { uz: "‹ Orqaga", ru: "‹ Назад", en: "‹ Back" },
+  "wr.reason.design": { uz: "Dizayn", ru: "Дизайн", en: "Design" },
+  "wr.reason.images": { uz: "Rasmlar", ru: "Картинки", en: "Images" },
+  "wr.reason.text": { uz: "Matn", ru: "Текст", en: "Text" },
+  "wr.reason.errors": { uz: "Xatolar", ru: "Ошибки", en: "Mistakes" },
+  "wr.reason.other": { uz: "Boshqa", ru: "Другое", en: "Other" },
+  "wr.skip": { uz: "O‘tkazib yuborish", ru: "Пропустить", en: "Skip" },
+  "wr.pick": { uz: "Ishni 1 dan 5 gacha baholang", ru: "Оцените работу от 1 до 5", en: "Rate this work from 1 to 5" },
+  "wr.thanks": { uz: "Rahmat! Bahoyingiz qabul qilindi", ru: "Спасибо! Ваша оценка принята", en: "Thank you! Your rating has been saved" },
+  "wr.askReason": {
+    uz: "Bahoyingiz qabul qilindi. Nima yoqmadi? Sababni tanlang",
+    ru: "Оценка принята. Что не понравилось? Выберите причину",
+    en: "Rating saved. What went wrong? Pick a reason",
+  },
+  "wr.notYours": { uz: "Bu ish sizniki emas", ru: "Это не ваша работа", en: "This work is not yours" },
+  "wr.gone": { uz: "Bu ish topilmadi — o‘chirilgan bo‘lishi mumkin", ru: "Работа не найдена — возможно, она удалена", en: "This work was not found — it may have been deleted" },
+  "wr.notReady": { uz: "Ish hali tayyor emas", ru: "Работа ещё не готова", en: "This work is not ready yet" },
+  "wr.rateLimit": { uz: "Juda ko‘p baho — birozdan keyin urinib ko‘ring", ru: "Слишком много оценок — попробуйте позже", en: "Too many ratings — please try again later" },
+
   /* ── Ishlarim ── */
   "files.title": { uz: "Ishlarim", ru: "Мои работы", en: "My files" },
   "files.empty": {
