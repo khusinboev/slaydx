@@ -286,7 +286,11 @@ export type TtsPriceRow =
  * `gemini-3.1-flash-tts-preview` has no published price yet: it is deliberately
  * absent, so using it is flagged «unpriced» instead of guessed.
  */
-/** ElevenLabs Creator plan: $22 for 121 000 credits (1 credit = 1 eleven_v3 character), per 1M characters. */
+/**
+ * ElevenLabs Creator plan: $22 for 121 000 credits (1 credit = 1 eleven_v3 character), per 1M characters. Kept for
+ * eleven_v4 (2026-11-12): a live 160-character v4 request reported `character-cost: 71`, one sample is no rate, and the
+ * 1:1 figure errs for the house (`lib/media/catalog-speech.ts` header).
+ */
 export const ELEVENLABS_CREATOR_USD_PER_M_CHARS = (22 / 121_000) * 1_000_000;
 /**
  * The same plan per ONE credit ($22 / 121 000 ≈ $0.000181818): the Studio «Audio» tab (P6, `lib/media/catalog-audio.ts`)

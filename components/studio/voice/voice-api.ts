@@ -26,7 +26,19 @@ const num = (v: unknown, d: number): number => (typeof v === "number" && Number.
 
 function voices(raw: unknown): LibraryVoice[] {
   return (Array.isArray(raw) ? raw : [])
-    .map((v) => (isObj(v) && str(v.id) && str(v.name) && (v.gender === "female" || v.gender === "male") ? { id: v.id as string, name: v.name as string, gender: v.gender as VoiceGender } : null))
+    .map((v): LibraryVoice | null => {
+      if (!(isObj(v) && str(v.id) && str(v.name) && (v.gender === "female" || v.gender === "male"))) return null;
+      const note = str(v.note);
+      // A native-speaker voice (the Uzbek library voices): `native` + `lang`, its style note for the list.
+      return {
+        id: v.id as string,
+        name: v.name as string,
+        gender: v.gender as VoiceGender,
+        ...(v.lang === "uz" ? { lang: "uz" as const } : {}),
+        ...(note ? { note: note.slice(0, 40) } : {}),
+        ...(v.native === true ? { native: true as const } : {}),
+      };
+    })
     .filter((v): v is LibraryVoice => v !== null);
 }
 

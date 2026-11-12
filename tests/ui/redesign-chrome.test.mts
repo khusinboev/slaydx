@@ -2,12 +2,12 @@ import "./setup.ts";
 import test, { afterEach, before } from "node:test";
 import assert from "node:assert/strict";
 import { createElement as h } from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 import { WalletPage } from "../../components/wallet/WalletPage.tsx";
 import { PayDialog } from "../../components/overlays/PayDialog.tsx";
-import { DEFAULT_TOPUP, TOPUP_PRESETS, openPay, usePayAmount } from "../../components/overlays/pay-amount.ts";
+import { TOPUP_PRESETS, openPay, usePayAmount } from "../../components/overlays/pay-amount.ts";
 import { ToolChrome } from "../../components/forms/ToolChrome.tsx";
 import { RESULT_LIST_PATH, ResultView } from "../../components/files/ResultView.tsx";
 import { ResultLayout } from "../../components/files/ResultLayout.tsx";
@@ -22,11 +22,11 @@ import type * as api from "../../lib/api-client.ts";
 
 /**
  * Redesign W5 «Chrome & type» (docs/redesign/PLAN.md): the F0 hand-offs and
- * the Hamyon quick packages.
+ * the Hamyon top-up entry.
  *
- *   - «Tez to'ldirish»: one card per `TOPUP_PRESETS` amount, «eng qulay» on the
- *     PayDialog default; a card opens PayDialog with ITS amount preselected and
- *     the order is created with it; no amount → the default stays;
+ *   - «To'ldirish usullari» (owner 2026-11-12, replaced the «Tez to'ldirish» packages):
+ *     a method row opens the sheet with an EMPTY amount; a `TOPUP_PRESETS` chip fills
+ *     it and the order is created with it; `openPay({ amount })` pre-fills any amount;
  *   - PayDialog signed out → login returning to `/uz/wallet` (was `/uz/purchase`);
  *   - ToolChrome header: PageHeader «←» to `/uz/create`, the tool's icon chip in
  *     its `tc` colour, its description as the subtitle;
@@ -34,8 +34,8 @@ import type * as api from "../../lib/api-client.ts";
  *   - sitemap lists `/uz/wallet`, not the `/uz/purchase` alias.
  *
  * Mutations (each turned the named test red, then restored): delete → `/uz`; openPay ignoring the
- * amount; PAY_RETURN_PATH → `/uz/purchase`; sitemap back to `/uz/purchase`; tool chip without `--tc`;
- * «eng qulay» on 10 000. Elsewhere: toast without `--tabbar-h` (result-actions), `--app-topbar-h: 3.5rem`
+ * amount; PAY_RETURN_PATH → `/uz/purchase`; sitemap back to `/uz/purchase`; tool chip without `--tc`.
+ * Elsewhere: toast without `--tabbar-h` (result-actions), `--app-topbar-h: 3.5rem`
  * (result-layout), search → `/uz/purchase`, sheet without grabber / `--sheet-pb` (shell-phone),
  * Segmented `text-xs`, counter 11 px (touch-layer), submit bar pb env() only (tool-chrome-keyboard).
  */
@@ -60,7 +60,7 @@ afterEach(() => {
   cleanup();
   globalThis.fetch = realFetch;
   useUi.setState({ overlay: null, returnTo: null });
-  usePayAmount.setState({ amount: DEFAULT_TOPUP });
+  usePayAmount.setState({ amount: 0, method: null, bonusPercent: null });
   useAppStore.setState({ loggedIn: false, user: null });
 });
 
@@ -109,39 +109,39 @@ function signIn() {
 }
 
 const pressed = () => [...document.querySelectorAll<HTMLElement>("[data-pay-amount]")].filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => Number(b.getAttribute("data-pay-amount")));
+const amountValue = () => (document.querySelector("[data-pay-amount-input]") as HTMLInputElement | null)?.value ?? null;
 
-/* ───────────────────────── Hamyon «Tez to'ldirish» ───────────────────────── */
+/* ───────────────────────── Hamyon «To'ldirish usullari» (owner 2026-11-12: replaced «Tez to'ldirish») ───────────────────────── */
 
-test("Hamyon packages: one card per PayDialog amount, «eng qulay» only on the dialog default", () => {
+test("Hamyon: methods instead of preset packages; the top-up facts live under the methods", () => {
   signIn();
   stub();
   render(inRouter(h(WalletPage)));
-  const packs = [...document.querySelectorAll<HTMLElement>("[data-wallet-pack]")];
-  assert.deepEqual(packs.map((p) => Number(p.getAttribute("data-wallet-pack"))), [...TOPUP_PRESETS]);
-  assert.deepEqual([...TOPUP_PRESETS], [10_000, 25_000, 50_000, 100_000], "the real PayDialog list");
-  const best = packs.filter((p) => /eng qulay/.test(p.textContent ?? ""));
-  assert.equal(best.length, 1);
-  assert.equal(Number(best[0]!.getAttribute("data-wallet-pack")), DEFAULT_TOPUP);
-  assert.equal(DEFAULT_TOPUP, 25_000);
-  for (const p of packs) assert.match(p.className, /min-h-\[4\.5rem\]/, "≥ 44 px target");
-  assert.ok(document.querySelector("[data-wallet-packs] [data-wallet-features]"), "the top-up facts live under the packages now");
+  assert.ok(!document.querySelector("[data-wallet-pack], [data-wallet-packs]"), "no preset amount cards");
+  assert.deepEqual([...document.querySelectorAll("[data-wallet-method]")].map((b) => b.getAttribute("data-wallet-method")), ["click", "payme"]);
+  for (const b of document.querySelectorAll("[data-wallet-method]")) assert.match(b.className, /min-h-\[68px\]/, "≥ 44 px target");
+  assert.ok(document.querySelector("[data-wallet-methods] [data-wallet-features]"), "the top-up facts live under the methods");
+  assert.deepEqual([...TOPUP_PRESETS], [10_000, 25_000, 50_000, 100_000], "the sheet's quick-fill chips");
 });
 
 for (const amount of TOPUP_PRESETS) {
-  test(`Hamyon package ${amount}: opens PayDialog with ${amount} preselected; Click orders exactly ${amount}`, async () => {
+  test(`Hamyon «Click» row + chip ${amount}: the sheet starts empty, the chip fills ${amount}; Click orders exactly ${amount}`, async () => {
     signIn();
     const calls = stub();
     render(inRouter(h("div", null, h(WalletPage), h(PayDialog))));
-    // Start from another choice so a no-op preselect cannot pass.
-    usePayAmount.setState({ amount: amount === 10_000 ? 100_000 : 10_000 });
     await act(async () => {
-      fireEvent.click(document.querySelector(`[data-wallet-pack="${amount}"]`)!);
+      fireEvent.click(document.querySelector('[data-wallet-method="click"]')!);
     });
     assert.equal(useUi.getState().overlay, "pay");
-    assert.deepEqual(pressed(), [amount], "only that amount is selected");
-    assert.match(document.querySelector("[data-pay-total]")!.textContent ?? "", new RegExp(`${groupDigits(amount)} so.m`));
+    assert.deepEqual(pressed(), [], "nothing preselected");
+    assert.equal(amountValue(), "");
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Click" }));
+      fireEvent.click(document.querySelector(`[data-pay-amount="${amount}"]`)!);
+    });
+    assert.deepEqual(pressed(), [amount], "only that amount is selected");
+    assert.match(amountValue() ?? "", new RegExp(`^${groupDigits(amount)}$`));
+    await act(async () => {
+      fireEvent.click(document.querySelector("[data-pay-continue]")!);
       await new Promise((r) => setTimeout(r, 5));
     });
     const post = calls.find((c) => c.method === "POST" && c.url === "/api/payments/orders");
@@ -150,25 +150,25 @@ for (const amount of TOPUP_PRESETS) {
   });
 }
 
-test("PayDialog without an amount: the default (25 000) is preselected; plain open keeps the user's choice; an unknown amount is ignored", async () => {
+test("openPay: no amount → empty; a context amount (any, not only a preset) is pre-filled; a plain reopen is empty again", async () => {
+  // MUTATION: openPay back to the preset-only rule → 30 000 ignored.
   signIn();
   stub();
   render(inRouter(h(PayDialog)));
-  await act(async () => openPay());
-  assert.deepEqual(pressed(), [DEFAULT_TOPUP], "fresh dialog: the default");
-  await act(async () => {
-    fireEvent.click(document.querySelector('[data-pay-amount="50000"]')!);
-  });
+  await act(async () => openPay({ method: "click" }));
+  assert.equal(amountValue(), "", "fresh sheet: empty");
+  assert.deepEqual(pressed(), []);
+  await act(async () => useUi.getState().close());
+  await act(async () => openPay({ method: "click", amount: 30_000 }));
+  assert.match(amountValue() ?? "", /^30.000$/, "the suggestion is pre-filled");
+  assert.equal(useUi.getState().overlay, "pay");
   await act(async () => useUi.getState().close());
   await act(async () => useUi.getState().open("pay"));
-  assert.deepEqual(pressed(), [50_000], "open(\"pay\") without an amount keeps the last choice");
-  await act(async () => useUi.getState().close());
-  await act(async () => openPay({ amount: 30_000 }));
-  assert.deepEqual(pressed(), [50_000], "not a preset: ignored");
-  assert.equal(useUi.getState().overlay, "pay", "the dialog still opens");
+  assert.ok(document.querySelector('[data-pay-step="choose"]'), "plain open: the chooser");
+  assert.equal(usePayAmount.getState().amount, 0, "the old suggestion is gone");
 });
 
-test("PayDialog signed out: a method opens the login returning to /uz/wallet (not the /uz/purchase alias)", async () => {
+test("PayDialog signed out: «Davom etish» opens the login returning to /uz/wallet (not the /uz/purchase alias)", async () => {
   useAppStore.setState({
     sessionChecked: true,
     loggedIn: false,
@@ -177,9 +177,9 @@ test("PayDialog signed out: a method opens the login returning to /uz/wallet (no
   });
   stub();
   render(inRouter(h(PayDialog)));
-  await act(async () => openPay({ amount: 100_000 }));
+  await act(async () => openPay({ method: "payme", amount: 100_000 }));
   await act(async () => {
-    fireEvent.click(document.querySelector("[data-pay-method=\"payme\"]")!);
+    fireEvent.click(document.querySelector("[data-pay-continue]")!);
   });
   assert.equal(useUi.getState().overlay, "login");
   assert.equal(useUi.getState().returnTo, "/uz/wallet");
