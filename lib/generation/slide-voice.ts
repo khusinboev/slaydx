@@ -71,6 +71,13 @@ const STRONG: readonly RegExp[] = [
   /bugungi ma'ruza/,
   /играет важную роль|необходимо отметить|следует отметить|имеет большое значение/,
   /plays a (crucial|vital|key) role|it is worth noting|is of great importance/,
+  // Section / cover / closing subtitle openers and closers of a methodical document (lead review, follow-up 1).
+  /(ushbu|bu|mazkur) (bo'lim|qism)(da|imizda|ida)\b/,
+  /yoritib beril/,
+  /ko'rib chiqil/,
+  /muhokama qilin/,
+  /tahlili\s*[.!]?\s*$/m,
+  /в (этом|данном) разделе|рассматрива(ется|ются)/,
 ];
 const WEAK: readonly RegExp[] = [
   /amalga oshiril/,
@@ -89,6 +96,8 @@ const WEAK: readonly RegExp[] = [
 
 /** Points per slide at which the slide is sent to the (existing) repair call. */
 export const OFFICIALESE_MIN = 3;
+/** Subtitle-only slides (section, cover, closing) — one methodical opener/closer (2 points) is already the whole text. */
+export const OFFICIALESE_MIN_SUBTITLE = 2;
 
 function norm(text: string): string {
   return text.toLowerCase().replace(/[ʻʼ’‘`]/g, "'");
@@ -107,9 +116,17 @@ export function officialeseText(s: SlideModel): string {
 }
 
 /** Layouts whose body the repair call rewrites wholesale (`mergeBody`); others are never candidates. */
-const REWRITABLE = new Set(["bullets", "process", "twoCol", "compare", "section"]);
+const REWRITABLE = new Set(["bullets", "process", "twoCol", "compare", "section", "title", "closing"]);
+const SUBTITLE_ONLY = new Set(["section", "title", "closing"]);
 
 /** Does this slide read like a methodical document (student voice only; the caller decides the voice). */
 export function isOfficialese(s: SlideModel): boolean {
-  return REWRITABLE.has(s.layout) && officialeseScore(officialeseText(s)) >= OFFICIALESE_MIN;
+  if (!REWRITABLE.has(s.layout)) return false;
+  const min = SUBTITLE_ONLY.has(s.layout) ? OFFICIALESE_MIN_SUBTITLE : OFFICIALESE_MIN;
+  return officialeseScore(SUBTITLE_ONLY.has(s.layout) ? (s.subtitle ?? "") : officialeseText(s)) >= min;
+}
+
+/** Student-voice rule for section subtitles (structure prompt). */
+export function sectionHookLine(): string {
+  return `section slaydda subtitle — BO‘SH QOLMASIN: tinglovchi shu qismda nimani bilib olishini aytadigan bitta aniq «ilgak» gap yoki savol (masalan «Nega barg yashil, lekin qizil nurni yaxshi yutadi?»). «Ushbu bo‘limda», «Mazkur qismda», «Bu bo‘limda» bilan boshlamang; «yoritib beriladi», «ko‘rib chiqiladi», «muhokama qilinadi», «…tahlili» bilan tugatmang.`;
 }

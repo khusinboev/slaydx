@@ -1002,6 +1002,15 @@ function mergeBody(orig: SlideModel, raw: Record<string, unknown>, rules: BodyRu
       const subtitle = clipTo(String(raw.subtitle ?? ""), clipLimit("subtitleSection", rules, visual, undefined, undefined, NO_IMAGE));
       return subtitle ? { ...orig, subtitle } : null;
     }
+    // Only the officialese reason reaches these (they are never thin): the subtitle is rewritten, nothing else.
+    case "closing": {
+      const subtitle = clipTo(String(raw.subtitle ?? ""), clipLimit("subtitleClosing", rules, visual, undefined, undefined, NO_IMAGE));
+      return subtitle ? { ...orig, subtitle } : null;
+    }
+    case "title": {
+      const subtitle = clipTo(String(raw.subtitle ?? ""), SLIDE_LIMITS.subtitle);
+      return subtitle ? { ...orig, subtitle } : null;
+    }
     case "quiz": {
       /*
        * Test — eng xavfli ta'mir: javob kaliti buzilmasin.
@@ -1065,12 +1074,14 @@ const REASON_TEXT: Record<
     `bosqich matni qisqa — ${t.maxSteps > PROCESS_MIN_STEPS ? `${PROCESS_MIN_STEPS}–${t.maxSteps}` : PROCESS_MIN_STEPS} bosqich; text: ${Object.entries(t.stepTextBy)
       .map(([n, r]) => `${n} bosqichda ${fmtRange(r)}`)
       .join(", ")} so‘z — nima qilinadi va natija nima`,
-  "empty-subtitle": (t) => `subtitle bo‘sh — ${fmtRange(t.sectionSubtitle)} so‘zlik kirish: bu bo‘limda nima ko‘riladi`,
+  "empty-subtitle": (t) => `subtitle bo‘sh — ${fmtRange(t.sectionSubtitle)} so‘zlik kirish: tinglovchi shu qismda nimani bilib oladi`,
   "clipped-option": (t) =>
     `variant kesilgan yoki qutiga sig‘maydi — faqat shu variantni ≤ ${t.quizOptionMax} so‘z qilib, ASL MATNNING BOSHINI saqlab to‘ldiring/qisqartiring; qolgan variantlar, tartib va answer o‘zgarmasin`,
   "short-columns": (t) => `ustunlar yupqa — har ustunda ${fmtRange({ min: Math.min(3, t.maxColItems), max: t.maxColItems })} band, har band ${fmtRange(t.colItem)} so‘z`,
-  officialese: () =>
-    `idoraviy uslub («amalga oshiriladi», «muhim ahamiyat kasb etadi», «hisoblanadi»…) — shu fikrlarni talaba tilida, qisqa faol gaplar va aniq misol bilan qayta yozing; o‘sha uzunlikda, yangi fakt qo‘shmang`,
+  officialese: (_t, _r, s) =>
+    s.layout === "section" || s.layout === "title" || s.layout === "closing"
+      ? `subtitle idoraviy («Ushbu bo‘limda…», «…ko‘rib chiqiladi», «…tahlili») — uni tinglovchiga qaratilgan bitta aniq gap yoki savol qilib qayta yozing, o‘sha uzunlikda, yangi fakt qo‘shmang`
+      : `idoraviy uslub («amalga oshiriladi», «muhim ahamiyat kasb etadi», «hisoblanadi»…) — shu fikrlarni talaba tilida, qisqa faol gaplar va aniq misol bilan qayta yozing; o‘sha uzunlikda, yangi fakt qo‘shmang`,
   "clipped-text": (_t, r, s, visual, reasons) => {
     const caps = clippedFields(s, r, visual)
       .map((f) => `${{ title: "title", bullets: "har band", colItem: "har ustun bandi", stepText: "har bosqich text" }[f.field]} ≤ ${f.words} so‘z va ≤ ${Math.floor(PROMPT_HEADROOM * f.cap)} belgi`)
@@ -1088,6 +1099,8 @@ const FIELDS: Partial<Record<SlideModel["layout"], string>> = {
   twoCol: `"left":[""],"right":[""]`,
   compare: `"left":[""],"right":[""]`,
   section: `"subtitle":""`,
+  title: `"subtitle":""`,
+  closing: `"subtitle":""`,
   quiz: `"quiz":[{"q":"","options":["","","",""],"answer":0}]`,
 };
 

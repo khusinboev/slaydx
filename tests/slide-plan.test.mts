@@ -718,7 +718,7 @@ const LONG_BULLETS = [
 function richFor(b: SlideBeat, i: number, thinAt: number): Record<string, unknown> {
   const raw = rawFor(b, i);
   if (b.layout === "bullets") raw.bullets = i === thinAt ? ["Qisqa."] : LONG_BULLETS;
-  if (b.layout === "section") raw.subtitle = "Bu bo‘limda jarayonning asosiy bosqichlari va ularning ahamiyati batafsil ko‘rib chiqiladi.";
+  if (b.layout === "section") raw.subtitle = "Jarayon qaysi bosqichlardan o‘tadi va har bir bosqich natijaga qanday hissa qo‘shadi?"; // student-voice hook: an officialese fixture would (rightly) trigger the repair call
   if (b.layout === "process") raw.steps = [1, 2, 3].map((n) => ({ title: `Bosqich ${n}`, text: LONG_BULLETS[n - 1] }));
   if (b.layout === "twoCol" || b.layout === "compare") Object.assign(raw, { left: LONG_BULLETS.slice(0, 2), right: LONG_BULLETS.slice(2) });
   return raw;

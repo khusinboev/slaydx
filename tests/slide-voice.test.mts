@@ -123,6 +123,46 @@ test("repair: a rewrite that is still officialese is rejected (original kept)", 
   );
 });
 
+const sectionSlide = (subtitle: string): SlideModel => ({ id: "s2", layout: "section", title: "Fotosintez mexanizmi", subtitle, plan: 2 }) as SlideModel;
+const OFFICIAL_SECTION = "Ushbu bo‘limda tilakoid pardalarida kechuvchi yorug‘lik reaksiyalari va stromadagi jarayonlar batafsil ko‘rib chiqiladi.";
+const HOOK_SECTION = "Barg ichidagi mitti «quyosh panellari» suvni qanday parchalaydi va nega bunda kislorod ajraladi?";
+
+test("section / cover / closing subtitles: methodical openers and closers are officialese, a hook is not", () => {
+  assert.ok(isOfficialese(sectionSlide(OFFICIAL_SECTION)));
+  assert.ok(isOfficialese(sectionSlide("Mazkur qismda Temurning harbiy yurishlari yoritib beriladi.")));
+  assert.ok(!isOfficialese(sectionSlide(HOOK_SECTION)));
+  assert.ok(isOfficialese({ id: "s0", layout: "title", title: "Sun’iy intellekt", subtitle: "Zamonaviy ishlab chiqarish va mehnat bozoridagi transformatsiyalar tahlili" } as SlideModel));
+  assert.ok(isOfficialese({ id: "s9", layout: "closing", title: "Xulosa", subtitle: "Bu bo‘limda olingan natijalar muhokama qilinadi." } as SlideModel));
+  // MUTATION: drop the section openers/closers from STRONG → the first three asserts fail.
+  assert.ok(officialeseScore(OFFICIAL_SECTION) >= 4);
+});
+
+test("writer prompt: student decks get the section «hook» rule, professional decks keep the plain intro rule", () => {
+  // MUTATION: always use the old section line in structure.ts → fails.
+  assert.match(slideSystem(meta("auto"), lecture), /«ilgak» gap yoki savol/);
+  assert.match(slideSystem(meta("auto"), lecture), /«Ushbu bo‘limda», «Mazkur qismda», «Bu bo‘limda» bilan boshlamang/);
+  assert.ok(!slideSystem(meta("management"), lecture).includes("«ilgak»"));
+});
+
+test("repair: an officialese section subtitle and cover subtitle ride the single call and are rewritten", async () => {
+  const m = meta("students_bachelor");
+  const cover = { id: "s0", layout: "title", title: "Fotosintez", subtitle: "O‘simliklarda organik moddalar sintezi jarayonining tahlili" } as SlideModel;
+  const input = [cover, sectionSlide(OFFICIAL_SECTION)];
+  await withLlm(
+    () => ({ slides: [{ index: 0, subtitle: "Barg quyosh nurini qanday qilib qandga aylantiradi?" }, { index: 1, subtitle: HOOK_SECTION }] }),
+    async (calls) => {
+      const out = await repairThinSlides(input, m, lecture, {}, later(), later());
+      assert.equal(calls.length, 1);
+      assert.match(calls[0].user, /index=0 layout=title/);
+      assert.match(calls[0].user, /index=1 layout=section/);
+      // MUTATION: drop `case "title"` from mergeBody → the cover keeps «…tahlili».
+      assert.equal(out[0].subtitle, "Barg quyosh nurini qanday qilib qandga aylantiradi?");
+      assert.equal(out[0].title, "Fotosintez", "cover title untouched");
+      assert.equal(out[1].subtitle, HOOK_SECTION);
+    },
+  );
+});
+
 test("repair: professional voice never sends a slide for officialese", async () => {
   const m = meta("management");
   await withLlm(
