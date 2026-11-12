@@ -1,69 +1,67 @@
 "use client";
 
-import { useEffect, useState, type ComponentType, type ReactNode } from "react";
-import { CreditCard, Smartphone, Wallet } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { useNav } from "@/components/nav/NavProvider";
+import { useOverlayHistory } from "@/components/nav/useOverlayHistory";
 import { useUi } from "@/lib/ui";
 import { cn } from "@/lib/cn";
-import { groupDigits } from "@/lib/format";
 import { openClickApp } from "@/lib/open-click-app";
-import { openExternalLink } from "@/lib/telegram-webapp";
 import { paynetPayLink } from "@/lib/paynet-link";
 import type { ClickMethod } from "@/lib/click-input";
 import { topupAmountError } from "@/lib/topup-limits";
 import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
-import { OverlayFrame, OverlayHeader, OverlayPanel, OverlayScrim } from "./OverlayFrame";
+import { OverlayClose, OverlayFrame, OverlayPanel, OverlayScrim } from "./OverlayFrame";
 import { PAY_RETURN_PATH, usePayAmount } from "./pay-amount";
 import { useDialog } from "./useDialog";
-import { AmountField } from "./pay/AmountField";
+import { AmountStep } from "./pay/AmountStep";
 import { CardStep } from "./pay/CardStep";
 import { PhoneStep } from "./pay/PhoneStep";
 import { PaynetStep } from "./pay/PaynetStep";
-import { ClickLogo, PaynetLogo } from "./pay/brand";
+import { MethodList, enabledPayMethods, payMethod, type PayMethodId } from "./pay/methods";
 import { WaitStep, type WaitSource } from "./pay/WaitStep";
-import { sectionLabel, textBtn } from "./pay/ui";
+import { textBtn } from "./pay/ui";
 
-export { TOPUP_PRESETS, DEFAULT_TOPUP, PAY_RETURN_PATH, openPay } from "./pay-amount";
+export { TOPUP_PRESETS, PAY_RETURN_PATH, openPay } from "./pay-amount";
 
-type View = "home" | "card" | "phone" | "wait" | "paynet";
+type View = "choose" | "amount" | "card" | "phone" | "wait" | "paynet";
 
 type ClickOrder = { id: string; amount: number; method: ClickMethod; checkoutUrl: string };
 
 const TITLES: Record<View, string> = {
-  home: "Balansni to'ldirish",
+  choose: "Balansni to'ldirish",
+  amount: "Balansni to'ldirish",
   card: "Karta orqali to'lash",
   phone: "Telefon raqam orqali",
   wait: "To'lov",
   paynet: "Paynet orqali to'lash",
 };
 
+/** The deepest wizard: chooser → Summa → card → (wait replaces card). One history entry per step above the first. */
+const MAX_DEPTH = 4;
+
 /**
- * To'lov usulini tanlash.
+ * The top-up sheet (owner 2026-11-12: «to'ldirish usullari», then a short wizard).
  *
- * Muhim: bu dialog **kredit qo'shmaydi**. U buyurtma yaratadi va to'lovni boshlaydi;
- * hisob FAQAT Click/Payme webhook'i tasdiqlagandan keyin to'ladi (dialog buyurtmani
- * kuzatib turadi).
+ * Muhim: bu dialog **kredit qo'shmaydi**. U buyurtma yaratadi va to'lovni boshlaydi; hisob FAQAT
+ * Click/Payme webhook'i (Paynet: o'z chaqiruvi) tasdiqlagandan keyin to'ladi.
  *
- * Click (owner 2026-10-09): erkin summa (1 000 – 10 000 000) va uchta TO'G'RIDAN-TO'G'RI usul —
- * «Karta» (o'z formamiz: bir martalik karta tokeni + SMS), «Telefon raqam» (Click ilovasiga hisob),
- * «Click ilovasi» (deeplink). «Click sahifasi orqali» — zaxira havola (eski oqim). Merchant API
- * sozlanmagan bo'lsa (`features.payments.clickDirect`) faqat oddiy «Click» tugmasi chiqadi.
+ *  - Opened from a wallet method row (`openPay({ method })`) it starts at «Summa»; opened any other way
+ *    (`open("pay")`, the hero «To'ldirish») it starts at the method chooser — the same list
+ *    (`pay/methods.tsx`), only the methods the server switched on.
+ *  - «Summa» (`AmountStep`): EMPTY unless a context opener suggested an amount (`openPay({ amount })`).
+ *  - Then per method, with the existing API calls unchanged: Click app → order (`method: "app"`) + the
+ *    deeplink (`openClickApp`) → waiting; card → `CardStep` → waiting; phone → `PhoneStep` → waiting;
+ *    plain Click / Payme → the provider page (`navigateFromOverlay`, replace); «Click sahifasi orqali»
+ *    stays as the fallback under the Click methods' «Davom etish». Paynet → `PaynetStep` (ID first; the
+ *    app opens only on its button; no order).
+ *  - Each step above the first owns a history entry (`useOverlayHistory`), so the phone's Back / Telegram
+ *    BackButton steps back one step, then closes; the header arrow does the same. Focus goes to the first
+ *    field of each step and back to the chosen row on return.
  *
  * Redesign W5 (variant A): telefonda pastki varaq, kompyuterda markazdagi dialog.
- *
- * Paynet (owner 2026-10-31): summa tanlangach Click bilan bir qatorda «Paynet» usuli — buyurtma
- * yaratilmaydi (Paynet agentda to'lanadi, hisobni Paynet chaqiruvi to'ldiradi), `PaynetStep` SlaydX ID,
- * «istalgan summa» qoidasi (min/max) va ilova tugmasini ko'rsatadi. Paynet o'zi to'langan summani
- * yuboradi va AYNAN shu summa hisobga tushadi (egasi 2026-10-31) — dialogdagi summa Paynet uchun shart
- * emas. Faqat server Paynet'ni sozlagan bo'lsa (`features.payments.paynet`).
- *
- * Plitkalar (owner 2026-11-01): summa tepada; ostida yonma-yon **Click** va **Paynet** (logotiplar bilan) —
- * bosilganda ilova shu summa bilan ochiladi va faqat tasdiqlash qoladi (Click: buyurtma deeplink'i, Paynet:
- * `paynetPayLink` — ID va summa havolada); ularning ostida yonma-yon «Telefon raqam» va «Karta» (Click).
- * Paynet plitkasi endi summani yuborgani uchun noto'g'ri summada boshqalari kabi yopiq; `PaynetStep` esa
- * ilova ochilmasa qo'lda to'lash uchun zaxira bo'lib qoladi.
  */
 export function PayDialog() {
   const open = useUi((s) => s.overlay === "pay");
@@ -75,37 +73,78 @@ export function PayDialog() {
 
   const amount = usePayAmount((s) => s.amount);
   const setAmount = usePayAmount((s) => s.setAmount);
-  const [view, setView] = useState<View>("home");
+  const method = usePayAmount((s) => s.method);
+  const setMethod = usePayAmount((s) => s.setMethod);
+  const bonusPercent = usePayAmount((s) => s.bonusPercent);
+
+  /** The wizard's steps; empty = not started (the first step follows from `method` at open). */
+  const [stack, setStack] = useState<View[]>([]);
   const [order, setOrder] = useState<ClickOrder | null>(null);
   const [source, setSource] = useState<WaitSource>("card");
   const [waitInitial, setWaitInitial] = useState<"polling" | "paid">("polling");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [paynetLaunched, setPaynetLaunched] = useState<"prefilled" | "plain" | null>(null);
   const panelRef = useDialog(open, close);
   const nav = useNav();
   /** Telefon (docs/mobile/PLAN.md O5): 44 px tugmalar, ekranga sig'adi va ichida aylanadi. */
   const phone = useCoarsePointer();
 
-  // Har ochilganda oldingi xato/kutish holati tozalansin (karta ma'lumotlari ham: qadam komponentlari yo'qoladi).
-  useEffect(() => {
-    if (!open) return;
+  const methods = enabledPayMethods(features?.payments);
+  /** Only a method the server has switched on (a stale `openPay({ method })` falls back to the chooser). */
+  const chosen = method && methods.some((m) => m.id === method) ? payMethod(method) : null;
+  const views: View[] = stack.length ? stack : [chosen ? "amount" : "choose"];
+  const view = views[views.length - 1]!;
+  const depth = views.length;
+
+  const popTo = (n: number) => {
     setError(null);
     setBusy(null);
-    setView("home");
+    setStack((s) => (s.length > n ? s.slice(0, n) : s));
+  };
+  // Phone Back / Telegram BackButton: one step back per press; the dialog's own entry (useDialog) closes it.
+  useOverlayHistory(open && depth >= 2, () => popTo(1));
+  useOverlayHistory(open && depth >= 3, () => popTo(2));
+  useOverlayHistory(open && depth >= MAX_DEPTH, () => popTo(3));
+
+  // Closed: forget the step, the order and the amount — the next open starts fresh (empty amount, chooser).
+  useEffect(() => {
+    if (open) return;
+    setStack([]);
     setOrder(null);
+    setError(null);
+    setBusy(null);
     setWaitInitial("polling");
-    setPaynetLaunched(null);
+    usePayAmount.setState({ amount: 0, method: null });
   }, [open]);
+
+  // Focus per step: the row the user came back to, else the step's first field (after useDialog's own focus).
+  const prevDepth = useRef(0);
+  useEffect(() => {
+    if (!open) {
+      prevDepth.current = 0;
+      return;
+    }
+    const back = depth < prevDepth.current;
+    prevDepth.current = depth;
+    const t = setTimeout(() => {
+      const panel = panelRef.current;
+      const step = panel?.querySelector<HTMLElement>("[data-pay-step]");
+      if (!panel || !step) return;
+      const target =
+        (back && method ? step.querySelector<HTMLElement>(`[data-pay-method="${method}"]`) : null) ??
+        step.querySelector<HTMLElement>("[data-autofocus]") ??
+        step.querySelector<HTMLElement>("input:not([disabled]), button:not([disabled]), a[href]");
+      target?.focus();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [open, view, depth, method, panelRef]);
 
   if (!open) return null;
 
-  // Sozlanmagan provayderning tugmalari CHIZILMAYDI (kalitsiz «o'chiq» tugma o'rniga).
-  const clickOn = features?.payments.click ?? false;
-  const directOn = clickOn && features?.payments.clickDirect === true;
-  const paymeOn = features?.payments.payme ?? false;
-  const paynetOn = features?.payments.paynet === true;
-  const anyEnabled = clickOn || paymeOn || paynetOn;
+  const push = (v: View) => setStack([...views, v]);
+  const replaceTop = (v: View) => setStack([...views.slice(0, -1), v]);
+  const stepBack = () => popTo(depth - 1);
+
   const amountErr = topupAmountError(amount);
 
   const paynetBase = features?.payments.paynetUrl ?? null;
@@ -113,17 +152,6 @@ export function PayDialog() {
   const paynetPrefill = features?.payments.paynetPrefill === true;
   /** The app link: with the payer id and the amount when prefill is on and the amount is valid, else the bare merchant link. */
   const paynetLink = paynetBase && user && paynetPrefill && !amountErr ? paynetPayLink(paynetBase, user.id, amount) : paynetBase;
-
-  function openPaynet() {
-    // `user` (the ID sent) can still be loading right after sign-in: stay on the list rather than open an empty step.
-    if (needLogin() || amountErr || !user) return;
-    setError(null);
-    // Paynet has no return URL: never replace this tab. Telegram → `openLink` (external); elsewhere a new tab,
-    // which the OS hands to the Paynet app; the step below stays here as the manual fallback.
-    if (paynetLink && !openExternalLink(paynetLink)) window.open(paynetLink, "_blank", "noopener,noreferrer");
-    setPaynetLaunched(paynetLink ? (paynetPrefill && paynetLink !== paynetBase ? "prefilled" : "plain") : null);
-    setView("paynet");
-  }
 
   function needLogin(): boolean {
     if (loggedIn) return false;
@@ -138,11 +166,9 @@ export function PayDialog() {
     setBusy(key);
     try {
       const { checkoutUrl } = await api.createOrder({ provider, amount, ...(provider === "click" ? { method: "page" as const } : {}) });
-      // Provayder sahifasi — qaytganda `/uz/purchase?order=...` ochiladi va u
-      // `/uz/wallet?order=...` ga yo'naltiradi (so'rov saqlanadi).
-      // Dialog tarix yozuvi avval olib tashlanadi: aks holda provayderdan
-      // «orqaga» o'lik (dialogsiz) yozuvga tushardi.
-      // `replace`: provayder sahifa yozuvini egallaydi — `?order=` dan «orqaga» provayderga qaytmaydi.
+      // Provayder sahifasi — qaytganda `/uz/purchase?order=...` ochiladi va u `/uz/wallet?order=...` ga
+      // yo'naltiradi. Dialog tarix yozuvi avval olib tashlanadi: aks holda provayderdan «orqaga» o'lik
+      // (dialogsiz) yozuvga tushardi. `replace`: `?order=` dan «orqaga» provayderga qaytmaydi.
       nav.navigateFromOverlay(checkoutUrl, { external: "replace" });
     } catch (e) {
       setError(e instanceof Error ? e.message : "To'lov boshlanmadi");
@@ -151,25 +177,25 @@ export function PayDialog() {
   }
 
   /** Click'ning uch to'g'ridan-to'g'ri usuli: buyurtma (summa/usul o'zgarmasa qayta ishlatiladi) + keyingi qadam. */
-  async function startDirect(method: Exclude<ClickMethod, "page">) {
+  async function startDirect(m: Exclude<ClickMethod, "page">) {
     if (needLogin() || amountErr) return;
     setError(null);
-    setBusy(method);
+    setBusy(m);
     try {
       let o = order;
-      if (!o || o.amount !== amount || o.method !== method) {
-        const r = await api.createOrder({ provider: "click", amount, method });
-        o = { id: r.order.id, amount, method, checkoutUrl: r.checkoutUrl };
+      if (!o || o.amount !== amount || o.method !== m) {
+        const r = await api.createOrder({ provider: "click", amount, method: m });
+        o = { id: r.order.id, amount, method: m, checkoutUrl: r.checkoutUrl };
         setOrder(o);
       }
-      if (method === "card") setView("card");
-      else if (method === "phone") setView("phone");
+      if (m === "card") push("card");
+      else if (m === "phone") push("phone");
       else {
         // Deeplink: Telegram'da tashqi (openLink), boshqa joyda oddiy o'tish. Dialog kuzatishda qoladi.
         openClickApp(o.checkoutUrl);
         setSource("app");
         setWaitInitial("polling");
-        setView("wait");
+        push("wait");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "To'lov boshlanmadi");
@@ -178,10 +204,39 @@ export function PayDialog() {
     }
   }
 
-  const back = () => {
+  function continueFromAmount() {
+    if (!chosen) return;
+    switch (chosen.id) {
+      case "app":
+      case "card":
+      case "phone":
+        void startDirect(chosen.id);
+        return;
+      case "click":
+        void payViaPage("click", "click");
+        return;
+      case "payme":
+        void payViaPage("payme", "payme");
+        return;
+      case "paynet":
+        // `user` (the ID shown) can still be loading right after sign-in: stay rather than open an empty step.
+        if (needLogin() || amountErr || !user) return;
+        setError(null);
+        push("paynet");
+        return;
+    }
+  }
+
+  const pick = (id: PayMethodId) => {
     setError(null);
-    setView("home");
+    setMethod(id);
+    push("amount");
   };
+
+  // The step indicator: «Summa» + the method's own steps; the chooser is not a numbered step.
+  const stepNames = chosen ? ["Summa", ...chosen.steps] : [];
+  const stepIndex = view === "amount" ? 0 : view === "wait" ? stepNames.length - 1 : 1;
+  const clickDirect = chosen?.id === "app" || chosen?.id === "card" || chosen?.id === "phone";
 
   return (
     <OverlayFrame
@@ -192,17 +247,98 @@ export function PayDialog() {
     >
       <OverlayScrim onClose={close} />
       <OverlayPanel ref={panelRef} phone={phone} sheet className={phone ? undefined : "max-w-md"}>
-        <OverlayHeader title={TITLES[view]} phone={phone} onClose={close} className="mb-1" />
+        <div className="flex items-center gap-1" data-overlay-header>
+          {depth > 1 ? (
+            <button
+              type="button"
+              onClick={stepBack}
+              data-pay-back
+              aria-label="Oldingi qadamga qaytish"
+              className={cn(
+                "text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring -ml-2 flex shrink-0 items-center justify-center rounded-[14px] outline-none transition-colors focus-visible:ring-2",
+                phone ? "size-11" : "size-10",
+              )}
+            >
+              <ArrowLeft className="size-5" aria-hidden="true" />
+            </button>
+          ) : null}
+          <h2 className="min-w-0 flex-1 truncate text-[19px] leading-tight font-bold tracking-[-0.01em]">{TITLES[view]}</h2>
+          <OverlayClose onClose={close} phone={phone} className="-mr-2" />
+        </div>
+
+        <div className="mt-1 mb-4 min-h-8" data-pay-progress>
+          {view !== "choose" && stepNames.length ? (
+            <ol className="flex gap-1.5" aria-label={`${stepIndex + 1}-qadam, jami ${stepNames.length}`}>
+              {stepNames.map((name, i) => (
+                <li key={`${name}-${i}`} className="min-w-0 flex-1" aria-current={i === stepIndex ? "step" : undefined}>
+                  <span className={cn("block h-1 rounded-full", i <= stepIndex ? "bg-primary" : "bg-muted")} aria-hidden="true" />
+                  <span
+                    className={cn(
+                      "mt-1 block truncate text-[12px] leading-tight",
+                      i === stepIndex ? "text-foreground font-semibold" : "text-muted-foreground",
+                    )}
+                  >
+                    {name}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-muted-foreground text-[14.5px] leading-snug">To&apos;lov usulini tanlang — balans to&apos;lov tasdiqlangach to&apos;ldiriladi.</p>
+          )}
+        </div>
+
+        {view === "choose" ? (
+          <div data-pay-step="choose">
+            {methods.length ? (
+              <div data-pay-methods>
+                <MethodList methods={methods} hook="pay" onPick={pick} />
+              </div>
+            ) : (
+              <p className="rounded-[14px] bg-amber-500/10 px-3.5 py-2.5 text-[13.5px] leading-snug text-amber-800 dark:text-amber-300" data-pay-none>
+                To&apos;lov provayderi hali ulanmagan. Administrator Click, Payme yoki Paynet kalitlarini sozlashi kerak.
+              </p>
+            )}
+          </div>
+        ) : null}
+
+        {view === "amount" && chosen ? (
+          <AmountStep
+            method={chosen}
+            amount={amount}
+            onChange={setAmount}
+            bonusPercent={bonusPercent}
+            busy={busy !== null}
+            canContinue={chosen.id !== "paynet" || !loggedIn || !!user}
+            onContinue={continueFromAmount}
+            error={error}
+            extra={
+              clickDirect ? (
+                <div className="mt-2 flex justify-center">
+                  <button
+                    type="button"
+                    data-pay-fallback
+                    disabled={busy !== null || !!amountErr}
+                    className={cn(textBtn, "text-[13px] underline disabled:opacity-40")}
+                    onClick={() => void payViaPage("click", "page")}
+                  >
+                    {busy === "page" ? "Ochilmoqda..." : "Click sahifasi orqali to'lash"}
+                  </button>
+                </div>
+              ) : null
+            }
+          />
+        ) : null}
 
         {view === "card" && order ? (
           <CardStep
             orderId={order.id}
             amount={order.amount}
-            onBack={back}
+            onBack={stepBack}
             onSubmitted={(status) => {
               setSource("card");
               setWaitInitial(status === "paid" ? "paid" : "polling");
-              setView("wait");
+              replaceTop("wait");
             }}
           />
         ) : null}
@@ -211,176 +347,31 @@ export function PayDialog() {
           <PhoneStep
             orderId={order.id}
             amount={order.amount}
-            onBack={back}
+            onBack={stepBack}
             onSent={() => {
               setSource("phone");
               setWaitInitial("polling");
-              setView("wait");
+              replaceTop("wait");
             }}
           />
         ) : null}
 
         {view === "wait" && order ? (
-          <WaitStep
-            orderId={order.id}
-            amount={order.amount}
-            source={source}
-            initial={waitInitial}
-            onBack={back}
-            onDone={close}
-            onReopen={source === "app" ? () => openClickApp(order.checkoutUrl) : undefined}
-          />
+          <div data-pay-step="wait">
+            <WaitStep
+              orderId={order.id}
+              amount={order.amount}
+              source={source}
+              initial={waitInitial}
+              onBack={stepBack}
+              onDone={close}
+              onReopen={source === "app" ? () => openClickApp(order.checkoutUrl) : undefined}
+            />
+          </div>
         ) : null}
 
-        {view === "paynet" && user ? <PaynetStep userId={user.id} appUrl={paynetLink} launched={paynetLaunched} onBack={back} /> : null}
-
-        {view === "home" ? (
-          <>
-            <p className="text-muted-foreground mb-5 text-[14.5px] leading-snug">
-              Summani tanlang yoki kiriting va to&apos;lov usulini bosing — balans to&apos;lov tasdiqlangach to&apos;ldiriladi.
-            </p>
-
-            <AmountField amount={amount} onChange={setAmount} />
-
-            {!anyEnabled ? (
-              <p className="mb-4 rounded-[14px] bg-amber-500/10 px-3.5 py-2.5 text-[13.5px] leading-snug text-amber-800 dark:text-amber-300">
-                To&apos;lov provayderi hali ulanmagan. Administrator Click, Payme yoki Paynet kalitlarini
-                sozlashi kerak.
-              </p>
-            ) : null}
-
-            <p className={sectionLabel}>To&apos;lov usuli</p>
-            <div className="flex flex-col gap-2" data-pay-methods>
-              {clickOn || paynetOn ? (
-                <div className="grid grid-cols-2 gap-2" data-pay-apps>
-                  {clickOn ? (
-                    <BrandTile
-                      method={directOn ? "app" : "click"}
-                      label={directOn ? "Click ilovasi" : "Click"}
-                      hint={directOn ? "Ilovada tasdiqlaysiz" : "Click sahifasida to'laysiz"}
-                      busy={busy}
-                      disabled={busy !== null || !!amountErr}
-                      onClick={() => void (directOn ? startDirect("app") : payViaPage("click", "click"))}
-                      className={cn(!paynetOn && "col-span-2")}
-                    >
-                      <ClickLogo className="text-foreground h-[26px] w-auto" />
-                    </BrandTile>
-                  ) : null}
-                  {paynetOn ? (
-                    <BrandTile
-                      method="paynet"
-                      label="Paynet"
-                      hint="Ilovada tasdiqlaysiz"
-                      busy={busy}
-                      disabled={busy !== null || !!amountErr || (loggedIn && !user)}
-                      onClick={openPaynet}
-                      className={cn(!clickOn && "col-span-2")}
-                    >
-                      <PaynetLogo className="text-foreground text-[24px]" />
-                    </BrandTile>
-                  ) : null}
-                </div>
-              ) : null}
-              {directOn ? (
-                <div className="grid grid-cols-2 gap-2" data-pay-direct>
-                  <IconTile method="phone" icon={Smartphone} title="Telefon raqam" hint="Click'ga hisob" busy={busy} disabled={busy !== null || !!amountErr} onClick={() => void startDirect("phone")} />
-                  <IconTile method="card" icon={CreditCard} title="Karta" hint="SMS kod bilan" busy={busy} disabled={busy !== null || !!amountErr} onClick={() => void startDirect("card")} />
-                </div>
-              ) : null}
-              {paymeOn ? (
-                <IconTile method="payme" icon={Wallet} title="Payme" hint="Payme sahifasiga o'tasiz" busy={busy} disabled={busy !== null || !!amountErr} onClick={() => void payViaPage("payme", "payme")} />
-              ) : null}
-            </div>
-
-            {directOn ? (
-              <div className="mt-1 flex justify-center">
-                <button
-                  type="button"
-                  data-pay-fallback
-                  disabled={busy !== null || !!amountErr}
-                  className={cn(textBtn, "text-[13px] underline disabled:opacity-40")}
-                  onClick={() => void payViaPage("click", "page")}
-                >
-                  {busy === "page" ? "Ochilmoqda..." : "Click sahifasi orqali to'lash"}
-                </button>
-              </div>
-            ) : null}
-
-            <p className="text-muted-foreground mt-3 text-center text-[13px] tabular-nums" data-pay-total>
-              To&apos;lanadi:{" "}
-              <span className="text-foreground font-semibold">{amountErr ? "—" : `${groupDigits(amount)} so'm`}</span>
-            </p>
-
-            {error ? (
-              <p role="alert" className="text-destructive mt-3 text-[13.5px]">
-                {error}
-              </p>
-            ) : null}
-          </>
-        ) : null}
+        {view === "paynet" && user ? <PaynetStep userId={user.id} amount={amount} appUrl={paynetLink} prefilled={paynetPrefill && paynetLink !== paynetBase} /> : null}
       </OverlayPanel>
     </OverlayFrame>
-  );
-}
-
-const tileCls =
-  "focus-visible:ring-ring bg-card enabled:hover:bg-accent flex w-full flex-col items-center justify-center gap-1.5 rounded-[18px] border px-2 text-center outline-none transition-[background-color,transform] focus-visible:ring-2 active:scale-[0.98] disabled:opacity-40 motion-reduce:transform-none";
-
-/** A provider app tile (Click / Paynet): the logo large, one hint line; the accessible name is the label. */
-function BrandTile({
-  method,
-  label,
-  hint,
-  busy,
-  disabled,
-  onClick,
-  className,
-  children,
-}: {
-  method: string;
-  label: string;
-  hint: string;
-  busy: string | null;
-  disabled: boolean;
-  onClick: () => void;
-  className?: string;
-  children: ReactNode;
-}) {
-  return (
-    <button type="button" data-pay-method={method} aria-label={label} disabled={disabled} onClick={onClick} className={cn(tileCls, "min-h-[84px] py-3", className)}>
-      <span className="flex h-7 items-center">{children}</span>
-      <span className="text-muted-foreground text-[12.5px] leading-snug">{busy === method ? "Ochilmoqda..." : hint}</span>
-    </button>
-  );
-}
-
-/** A secondary method tile (phone / card / Payme): an icon in a soft disc, the name and a short hint. */
-function IconTile({
-  method,
-  icon: Icon,
-  title,
-  hint,
-  busy,
-  disabled,
-  onClick,
-}: {
-  method: string;
-  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
-  title: string;
-  hint: string;
-  busy: string | null;
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button type="button" data-pay-method={method} disabled={disabled} onClick={onClick} className={cn(tileCls, "min-h-[76px] flex-row justify-start gap-2.5 px-2.5 py-2.5 text-left")}>
-      <span className="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-full max-[389px]:hidden">
-        <Icon aria-hidden className="size-[18px]" />
-      </span>
-      <span className="min-w-0">
-        <span className="block text-[15px] leading-tight font-semibold whitespace-nowrap">{busy === method ? "Ochilmoqda..." : title}</span>
-        <span className="text-muted-foreground block text-[12.5px] leading-snug">{hint}</span>
-      </span>
-    </button>
   );
 }

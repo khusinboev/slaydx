@@ -801,7 +801,9 @@ test("speech engine and voices: the voice goes by name; clones and unlisted voic
   assert.ok(!sp.FAL_ELEVEN_VOICES.some((v) => v.name === "Adam"), "the pages list no Adam");
   assert.equal(sp.FAL_ELEVEN_VOICES.length, 9);
   assert.deepEqual(sp.offeredVoices(sp.FAL_ELEVEN_V3_MODEL, sp.ELEVENLABS_VOICES).map((v) => v.id), sp.FAL_ELEVEN_VOICES.map((v) => v.id));
-  assert.equal(sp.offeredVoices("elevenlabs/eleven-v3", sp.ELEVENLABS_VOICES).length, sp.ELEVENLABS_VOICES.length, "the direct model keeps all ten");
+  assert.equal(sp.offeredVoices("elevenlabs/eleven-v3", sp.ELEVENLABS_VOICES).length, sp.ELEVENLABS_VOICES.length, "the direct model keeps all 24 (10 premade + 14 native Uzbek)");
+  assert.equal(sp.ELEVENLABS_VOICES.length, 24);
+  assert.deepEqual(sp.offeredVoices(sp.FAL_ELEVEN_V4_TURBO_MODEL, sp.ELEVENLABS_VOICES).filter((v) => v.native), [], "no native Uzbek voice leaks into fal (it sends voices by name)");
   assert.equal(sp.libraryVoicesOf(sp.FAL_ELEVEN_V4_TURBO_MODEL), sp.FAL_ELEVEN_VOICES);
   assert.equal(sp.takesClones(entry(sp.FAL_ELEVEN_V3_MODEL)), false, "no «Mening ovozlarim» on fal");
   assert.equal(speechRules.studioSpeechError({ modelId: sp.FAL_ELEVEN_V3_MODEL, text: "Salom", voice: RACHEL }), null);
