@@ -88,18 +88,18 @@ function gamesCell(): HomeCell {
  * grid order) gets «O'yinlar», the next «Rezyume», then «Tarjimon», «Maqola». The grid never has a hole and never
  * repeats a target.
  */
-function fallbackCells(features: SessionFeatures): HomeCell[] {
+export function homeFallbackCells(features: SessionFeatures): HomeCell[] {
   return [gamesCell(), toolCell("resume", features), toolCell("translation", features), toolCell("article", features)];
 }
 
 /**
  * The twelve cells of the home grid, always twelve, in the owner's order (2026-11-12): Slayd, Pro slayd, Mustaqil ish,
  * Referat, Konspekt, Kurs ishi, Insho, Test ishlash, Studio, AI yordamchi, Qattiqqo'l domla, Barchasi. A service behind
- * a switch (tests, chat, domla) is replaced by the next fallback (`fallbackCells`) while its switch is off; a tool
+ * a switch (tests, chat, domla) is replaced by the next fallback (`homeFallbackCells`) while its switch is off; a tool
  * without its provider key stays in place, disabled, as in the catalogue. «Barchasi» is always last.
  */
 export function homeCells(features: SessionFeatures): HomeCell[] {
-  const fallbacks = fallbackCells(features);
+  const fallbacks = homeFallbackCells(features);
   const gated = (service: ServiceConfig): HomeCell => ({
     ...(serviceVisible(service, features) ? serviceCell(service) : fallbacks.shift()!),
     flagged: true,

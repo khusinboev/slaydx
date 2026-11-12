@@ -85,12 +85,12 @@ export function HubBanner({ slides, pending, onPick, index }: { slides: HomeSlid
   // One timer per (slide, period): a slide change — by the timer, a swipe or a dot — and any hold restart it.
   useEffect(() => {
     if (!rotating) return;
-    const id = window.setTimeout(() => {
+    const id = setTimeout(() => {
       // The user is mid-scroll (a trackpad, a fling still settling): never fight it, wait a whole period more.
       if (Date.now() - lastScrollAt.current < SCROLL_IDLE_MS) setKick((k) => k + 1);
       else goTo((active + 1) % count);
     }, BANNER_ROTATE_MS);
-    return () => window.clearTimeout(id);
+    return () => clearTimeout(id);
   }, [rotating, active, count, kick, goTo]);
 
   if (pending) {
