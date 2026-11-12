@@ -43,7 +43,7 @@ export const STOCK_PER_PROVIDER = 4;
 export const STOCK_CANDIDATES = 5;
 /** Slots per judge call — each slot sends ≤ `STOCK_CANDIDATES` previews (~5-15 KB each). */
 export const JUDGE_GROUP = 4;
-export const JUDGE_TIMEOUT_MS = 25_000;
+export const JUDGE_TIMEOUT_MS = 35_000;
 /** Lanes of the search phase (stock HTTP is cheap and fast). */
 const SEARCH_LANES = 3;
 
@@ -274,11 +274,13 @@ export async function attachHybridImages(topic: string, jobs: HybridJob[], deadl
   const judge = opts.judge ?? judgeStockCandidates;
   const choice = new Map<string, number>();
   const withHits = slots.filter((s) => s.candidates.length);
-  for (let i = 0; i < withHits.length; i += JUDGE_GROUP) {
-    const group = withHits.slice(i, i + JUDGE_GROUP);
-    const picks = await judge(topic, group, deadline);
-    for (const slot of group) choice.set(slot.s.id, picks ? (picks.get(slot.s.id) ?? 0) : 0);
-  }
+  // Groups in parallel: one slow call must not eat the next group's time (live: a 25 s timeout on group 2 of 2).
+  const groups: Slot[][] = [];
+  for (let i = 0; i < withHits.length; i += JUDGE_GROUP) groups.push(withHits.slice(i, i + JUDGE_GROUP));
+  const verdicts = await Promise.all(groups.map((group) => judge(topic, group, deadline)));
+  groups.forEach((group, g) => {
+    for (const slot of group) choice.set(slot.s.id, verdicts[g] ? (verdicts[g]!.get(slot.s.id) ?? 0) : 0);
+  });
 
   // Persist the chosen stock photos; a failed download sends the slot to AI like «none fits».
   const needAi: Slot[] = [];
