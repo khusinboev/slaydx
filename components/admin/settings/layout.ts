@@ -43,6 +43,7 @@ export const TAB_DEFS: readonly TabDef[] = [
       "queue.mean_service_sec",
       "convert.disabled",
       "convert.daily_limit",
+      "title.daily_limit",
     ],
   },
   {

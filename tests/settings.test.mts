@@ -65,6 +65,7 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "queue.total_slots",
     "queue.mean_service_sec",
     "convert.daily_limit",
+    "title.daily_limit",
     "convert.disabled",
     "daily_quiz.enabled",
     "daily_quiz.reward",
@@ -160,6 +161,7 @@ test("standart qiymatlar = env (mahsulot xulqi o'zgarmaydi)", () => {
   assert.equal(d("queue.total_slots"), env.queue.totalSlots);
   assert.equal(d("queue.mean_service_sec"), env.queue.meanServiceSec, "0 (env unset) = measured automatically");
   assert.equal(d("convert.daily_limit"), 20);
+  assert.equal(d("title.daily_limit"), 30);
   assert.equal(d("convert.disabled"), false);
   // Daily quiz (docs/program-17 item 16): OFF until the owner has read the questions.
   assert.equal(d("daily_quiz.enabled"), false);

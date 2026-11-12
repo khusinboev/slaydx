@@ -14,7 +14,7 @@ import { useChannelGate } from "@/lib/channel-gate";
 import { ChannelGate } from "./ChannelGate";
 import { DraftNotice } from "./DraftNotice";
 import { useKeyboardInset } from "./useKeyboardInset";
-import { formatSom } from "@/lib/format";
+import { formatPrice, formatSom } from "@/lib/format";
 
 /**
  * Serverning 402 matni (`app/api/generations/route.ts`: «Balans yetarli
@@ -190,7 +190,7 @@ export function ToolChrome({
               <div className="min-w-0 shrink-0 pl-2.5">
                 <span className="text-muted-foreground block text-[12.5px] leading-tight">Narxi</span>
                 <span id={priceId} className="block text-[17px] leading-tight font-bold whitespace-nowrap tabular-nums" data-price-total>
-                  {formatSom(price)}
+                  {formatPrice(price)}
                 </span>
               </div>
             )}

@@ -42,6 +42,8 @@ export type ViewerKind =
   | "audio"
   | "translation"
   | "image"
+  /** «Titul»: one A4 page drawn from `planTitlePage` (`TitulViewer`), edited in place. */
+  | "titul"
   /** Program-17 item 5: one MP4 -- `<video controls playsinline>` + download / Telegram (`VideoViewer`). */
   | "video";
 
@@ -53,6 +55,8 @@ export function viewerKind(id: ToolId): ViewerKind {
       return "slides";
     case "resume":
       return "resume";
+    case "title-page":
+      return "titul";
     case "lesson-plan":
     case "texnologik-xarita":
     case "glossary":

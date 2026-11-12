@@ -19,6 +19,7 @@ const ResumeViewer = retryableLazy(() => import("./ResumeViewer").then((m) => ({
 // Bitta `lazy` o'rami — `ResultView` (jonli) ham shuni ishlatadi: jonli → tayyor o'tishda
 // ikkinchi o'ram bir kadr «Yuklanmoqda...» ko'rsatmasin (W4-D N3).
 export const SlideViewer = retryableLazy(() => import("./SlideViewer").then((m) => ({ default: m.SlideViewer })));
+const TitulViewer = retryableLazy(() => import("./TitulViewer").then((m) => ({ default: m.TitulViewer })));
 const WordViewer = retryableLazy(() => import("./WordViewer").then((m) => ({ default: m.WordViewer })));
 const TranslationViewer = retryableLazy(() => import("./TranslationViewer").then((m) => ({ default: m.TranslationViewer })));
 const ImageViewer = retryableLazy(() => import("./ImageViewer").then((m) => ({ default: m.ImageViewer })));
@@ -119,6 +120,9 @@ function viewerFor({
       // ilgari rezyume ko'ruvchisiga hech narsa berilmasdi va tahrir
       // umuman yoqilmasdi (Rezyume 2, AUDIT-15).
       return <ResumeViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} initialEdit={initialEdit} />;
+    case "titul":
+      // «Titul»: one sheet from `planTitlePage` (the DOCX draws the same plan); edit props as for the resume.
+      return <TitulViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} initialEdit={initialEdit} />;
     case "teacher":
       /*
        * O'qituvchi hujjatlari 2 (AUDIT-20 WP-C): beshala vosita umumiy
