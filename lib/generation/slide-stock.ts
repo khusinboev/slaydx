@@ -394,8 +394,13 @@ export async function attachHybridImages(topic: string, jobs: HybridJob[], deadl
   for (const slot of needAi.slice(allowed.length)) noPicture(slot);
   if (allowed.length) opts.onPhase?.("draw");
   let blockReason = "";
+  /*
+   * The Gemini account breaker (opened by a 403/5xx on any Gemini call of this process, e.g. the writer) also stops
+   * the AI draws: the image endpoint is the same account. Read-only check (`state`), so no half-open probe is spent.
+   */
+  const geminiOpen = () => breakerFor("gemini").state === "open";
   await mapPool(allowed, PRO_IMAGE_LANES, async (slot) => {
-    if (blockReason || deadline - Date.now() < ai.minMs) {
+    if (blockReason || geminiOpen() || deadline - Date.now() < ai.minMs) {
       noPicture(slot);
       return null;
     }

@@ -262,6 +262,30 @@ test("judge: an open Gemini breaker skips the call (no fetch) and the slots are 
   assert.equal(calls, 0);
 });
 
+test("open Gemini breaker → ZERO Gemini calls in the picture stage (query writer, judge, AI draw); slots declined", async () => {
+  process.env.GEMINI_API_KEY = "k";
+  const { breakerFor } = await import("../lib/generation/llm/breaker.ts");
+  breakerFor("gemini").trip(60_000, "403 account");
+  const inner = (() => {
+    stockStub();
+    return globalThis.fetch;
+  })();
+  let gemini = 0;
+  globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+    if (String(input).includes("generativelanguage.googleapis.com")) {
+      gemini += 1;
+      return json(403, { error: { message: "denied" } });
+    }
+    return inner(input as never, init);
+  }) as unknown as typeof fetch;
+  const rep = report(3);
+  // Real query writer, real judge, real Pro slayd Gemini image provider.
+  await attachHybridImages("Fotosintez", jobs(3), Date.now() + 60_000, rep, { policy: policy(), persist });
+  // MUTATION: drop the `geminiOpen()` check before the AI draw → 3 image calls.
+  assert.equal(gemini, 0, "no request reached Gemini");
+  assert.deepEqual([rep.got, rep.want, rep.declined], [0, 0, 3]);
+});
+
 test("judge: thumbnails download in parallel with a short per-fetch timeout; the call timeout is taken after them", async () => {
   process.env.GEMINI_API_KEY = "k";
   const seen: number[] = [];
