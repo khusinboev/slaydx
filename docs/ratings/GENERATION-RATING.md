@@ -97,7 +97,7 @@ The longest code is 53 bytes (`gr:r:<32 hex>:transcript-txt:d`), under Telegram'
 ## Admin
 
 - Web: `/admin/ratings` («Baholar») → «Ish baholari» block (`components/admin/ratings/WorkRatings.tsx`), data from
-  `GET /api/admin/ratings/works?days=7|30|90` (`adminHandler`, permission `jobs.view`, read-only, no audit entry): per tool
+  `GET /api/admin/ratings/works?days=7|30|90` (`adminHandler`, permission `bonus.view` like the page itself, read-only, no audit entry): per tool
   count, average (1 decimal), share of ≤ 3, top reasons; the newest 20 low ratings link to `/admin/generations/<id>`.
 - Bot «📈 Statistika»: «Baholar (30 kun): o‘rtacha 4.3 · N ta · ≤3: M ta» (`lib/server/bot/admin-stats.ts`, same 30
   Tashkent days as the other «30 kun» lines).

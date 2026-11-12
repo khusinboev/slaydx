@@ -50,7 +50,7 @@ const pct = (share: number): string => `${Math.round(share * 100)}%`;
 /**
  * «Ish baholari»: how users rated their own works (bot «⭐ Baholash» and the web API), per tool,
  * plus the newest low ratings with a link to the generation (read-only; `GET /api/admin/ratings/works`,
- * permission `jobs.view` enforced by the server).
+ * permission `bonus.view`, like the page, enforced by the server).
  */
 export function WorkRatings() {
   const [days, setDays] = useState("30");

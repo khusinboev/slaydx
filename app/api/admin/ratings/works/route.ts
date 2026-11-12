@@ -12,9 +12,10 @@ const WORK_RATING_DAYS = [7, 30, 90] as const;
 /**
  * «Ish baholari» (docs/ratings/GENERATION-RATING.md): work ratings per tool over the last `days`
  * Tashkent days (7 | 30 | 90, default 30) and the newest 20 low ratings with their generation ids.
- * Read-only, permission `jobs.view` (the low list links to the generation pages); no audit entry.
+ * Read-only, permission `bonus.view` — the same as the «Baholar» page and its app-rating API (every role holding it
+ * also holds `jobs.view`, which the generation links need); no audit entry.
  */
-export const GET = adminHandler("admin/ratings/works", { permission: "jobs.view" }, async (req) => {
+export const GET = adminHandler("admin/ratings/works", { permission: "bonus.view" }, async (req) => {
   const raw = new URL(req.url).searchParams.get("days") ?? "30";
   const days = Number(raw);
   if (!(WORK_RATING_DAYS as readonly number[]).includes(days)) throw new ApiError("Noto'g'ri parametr: days", 400);
