@@ -95,3 +95,17 @@ test("078 (work ratings) is additive: one new table, CHECKs added only when miss
     assert.match(code, new RegExp(`CREATE INDEX IF NOT EXISTS ${ix} `), ix);
   }
 });
+
+test("079 (domla on the web) is additive: defaulted / nullable columns, a guarded CHECK, one new table; rollback documented", () => {
+  const sql = readFileSync(new URL("../lib/server/migrations/079_domla_web.sql", import.meta.url), "utf8");
+  assert.deepEqual(guardHits(sql), [], "MUTATSIYA: a DROP / SET NOT NULL / ALTER COLUMN .. TYPE in 079 turns this red");
+  assert.match(sql, /^-- ROLLBACK:/m);
+  assert.match(sql, /^--   DROP TABLE IF EXISTS domla_audio;/m);
+  assert.match(sql, /^--   DELETE FROM schema_migrations WHERE name = '079_domla_web\.sql';/m);
+  const code = sql.replace(/--.*$/gm, "");
+  assert.match(code, /ALTER TABLE domla_sessions ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'bot';/, "old rows become bot defences");
+  assert.match(code, /IF NOT EXISTS \(SELECT 1 FROM pg_constraint WHERE conrelid = 'domla_sessions'::regclass AND conname = 'domla_sessions_channel_check'\)/);
+  assert.match(code, /CREATE TABLE IF NOT EXISTS domla_audio \(/);
+  assert.match(code, /REFERENCES domla_sessions\(id\) ON DELETE CASCADE/);
+  for (const m of code.matchAll(/ALTER TABLE (\w+) ADD /g)) assert.equal(m[1], "domla_sessions", "only domla_sessions gains columns / a constraint");
+});

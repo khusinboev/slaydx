@@ -227,8 +227,8 @@ const PACKETS_PER_PAGE = 50;
 export function webmToOgg(webm: Uint8Array, serial = 0x5d0a1a): { bytes: Uint8Array; seconds: number } {
   const { head, channels, packets } = webmOpusPackets(webm);
   if (packets.length === 0) throw new RemuxError("WebM ichida audio yo‘q");
-  const pages: Uint8Array[] = [page([head ?? opusHead(channels)], 0n, serial, 0, 0x02), page([opusTags()], 0n, serial, 1, 0)];
-  let granule = 0n;
+  const pages: Uint8Array[] = [page([head ?? opusHead(channels)], BigInt(0), serial, 0, 0x02), page([opusTags()], BigInt(0), serial, 1, 0)];
+  let granule = BigInt(0);
   let total = 0;
   let seq = 2;
   for (let i = 0; i < packets.length; i += PACKETS_PER_PAGE) {

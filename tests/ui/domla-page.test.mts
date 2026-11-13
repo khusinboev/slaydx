@@ -41,12 +41,13 @@ const HISTORY = [
 ];
 
 type Call = { url: string; method: string; body: string | null };
-function stub(state: unknown, post?: () => Response): Call[] {
+function stub(state: unknown, post?: () => Response, routes: Record<string, unknown> = {}): Call[] {
   const calls: Call[] = [];
   globalThis.fetch = (async (input: unknown, init: RequestInit = {}) => {
     const c = { url: String(input), method: (init.method ?? "GET").toUpperCase(), body: typeof init.body === "string" ? init.body : null };
     calls.push(c);
     if (c.method === "POST") return post ? post() : json(200, { ok: true, alreadyOpen: false });
+    if (c.url in routes) return json(200, routes[c.url]);
     return json(200, state);
   }) as typeof fetch;
   return calls;
@@ -71,8 +72,11 @@ test("price follows the server (not a constant)", async () => {
   await waitFor(() => assert.match(q("[data-domla-price]")!.textContent!, /1\s500 so‘m/));
 });
 
-test("start posts only the work id, then points to the bot", async () => {
-  const calls = stub(BASE);
+test("start posts only the work id, then the defence runs here as a chat (2026-11-13: no longer «go to the bot»)", async () => {
+  const sid = "11111111-2222-4333-8444-555555555555";
+  const calls = stub(BASE, () => json(200, { ok: true, alreadyOpen: false, sessionId: sid, channel: "web" }), {
+    [`/api/domla/sessions/${sid}`]: { id: sid, status: "preparing", topic: "Iqlim", grade: null, channel: "web", progress: { answered: 0, total: 5 }, results: [], weakest: null, asked: [], answers: [], waiting: null, scoring: false, notice: null },
+  });
   render(h(DomlaPage));
   await waitFor(() => assert.ok(q("[data-domla-start]")));
   fireEvent.click(all("[data-domla-work]")[1]!);
@@ -82,8 +86,9 @@ test("start posts only the work id, then points to the bot", async () => {
   const post = calls.find((c) => c.method === "POST")!;
   assert.equal(post.url, "/api/domla");
   assert.deepEqual(JSON.parse(post.body!), { generationId: "w-2" }, "start posts only the work id");
-  assert.match(q("[data-domla-started]")!.textContent!, /Boshlandi/);
-  assert.equal(q("[data-domla-bot-link]")!.getAttribute("href"), "https://t.me/slaydx_test_bot");
+  assert.match(q("[data-domla-started]")!.textContent!, /Boshlandi.*shu yerda/);
+  await waitFor(() => assert.ok(q("[data-domla-preparing]"), "the chat shows the examiner preparing"));
+  assert.ok(!q("[data-domla-bot-link]"), "a web defence is not sent to the bot");
 });
 
 test("a repeated start says nothing was charged again", async () => {
@@ -111,6 +116,7 @@ test("an open defence replaces the start card and shows the progress", async () 
   assert.ok(!q("[data-domla-start]"));
   assert.match(q("[data-domla-open]")!.textContent!, /ovozli xabar/);
   assert.ok(q("[data-domla-bot-link]"));
+  assert.ok(q("[data-domla-to-web]"), "a bot defence can move to the web");
 });
 
 test("history shows the grade, the questions and the weakest one with the right answer", async () => {
@@ -131,11 +137,13 @@ test("kill switch: only the notice, no start button", async () => {
   assert.ok(!q("[data-domla-start]") && !q("[data-domla-works]"));
 });
 
-test("no Telegram account / no works: explained, no start", async () => {
+test("no Telegram account: the defence can still start (it runs on the web); no works: explained, no start", async () => {
+  // 2026-11-13: before, a web-only account was refused here («Himoya Telegram botda o‘tadi»); now it defends on the page.
   stub({ ...BASE, telegramLinked: false });
   render(h(DomlaPage));
-  await waitFor(() => assert.ok(q("[data-domla-no-telegram]")));
-  assert.ok(!q("[data-domla-start]"));
+  await waitFor(() => assert.ok(q("[data-domla-web-only]")));
+  assert.ok(q("[data-domla-start]"), "a web-only account can start");
+  assert.ok(!q("[data-domla-no-telegram]"));
   cleanup();
   stub({ ...BASE, works: [] });
   render(h(DomlaPage));
