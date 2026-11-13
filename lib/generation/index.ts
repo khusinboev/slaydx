@@ -1,7 +1,7 @@
 import { buildAcademicDoc } from "./content";
 import { deliveredCount } from "./delivered";
 import { withJobCost } from "./job-cost";
-import { errorWithCause } from "./llm/failure";
+import { errorWithCause, llmOutage } from "./llm/failure";
 import { llmEnabled as llmKeyPresent } from "./llm";
 import { extractMeta, minPages } from "./meta";
 import { bodyWordCount, remainingMs, targetWords, wordCount } from "./quality";
@@ -778,13 +778,20 @@ async function buildArtifactInner(
     if (got < need) {
       const pages = Math.max(1, Math.round(got / 230));
       console.warn(`[gen] length gate: ${tool.id} ${got}/${need} so'z`);
-      throw new Error(
+      const short =
         essayNeed
           ? `Insho hajmi yetarli chiqmadi (${got} so'z, kerak: kamida ${need}). ` +
             `Pul balansingizga qaytariladi — qayta urinib ko‘ring.`
           : `Matn hajmi yetarli chiqmadi (~${pages} bet, kerak: ${meta.pagesLabel} bet). ` +
-            `Pul balansingizga qaytariladi — qayta urinib ko‘ring yoki kichikroq hajm tanlang.`,
-      );
+            `Pul balansingizga qaytariladi — qayta urinib ko‘ring yoki kichikroq hajm tanlang.`;
+      /*
+       * Prod 2026-11-13: Gemini answered 402 (prepaid credits depleted), the work engine kept its skeleton (~1 page) and
+       * this gate told the user «Matn hajmi yetarli chiqmadi … kichikroq hajm tanlang» — wrong advice, the size was not
+       * the problem. When every provider tried since the last answer is down, the short text is the outage's fault:
+       * `errorWithCause` gives `AI_OUTAGE_ERROR` (and the provider row for the owner alert). Any answer after the failure
+       * keeps the gate's own message (`llmOutage` is false then).
+       */
+      throw llmOutage() ? errorWithCause(short) : new Error(short);
     }
   }
 
