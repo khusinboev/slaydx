@@ -123,13 +123,13 @@ test("client registry: invisible on the server, applied in the browser, change d
   // Server (no `window`): the registry is ignored — the server never relies on client state.
   assert.equal(typeof (globalThis as { window?: unknown }).window, "undefined");
   assert.equal(getClientPriceAdjust("slide"), undefined);
-  assert.equal(priceFor(slide, { slideCount: 10 }), 5750);
+  assert.equal(priceFor(slide, { slideCount: 10 }), 3000);
   assert.equal(clientAdjustedPrice("slide", 3000), 3000);
 
   inBrowser(() => {
     assert.deepEqual(getClientPriceAdjust("slide"), { percent: 150, roundTo: 1000 });
-    assert.equal(priceFor(slide, { slideCount: 10 }), 9000); // 5750 × 1.5 = 8625 → 8.625 → 9 × 1000
-    assert.equal(basePriceFor(slide, { slideCount: 10 }), 5750);
+    assert.equal(priceFor(slide, { slideCount: 10 }), 5000); // 3000 × 1.5 = 4500 → 4.5 → 5 × 1000
+    assert.equal(basePriceFor(slide, { slideCount: 10 }), 3000);
     assert.equal(clientAdjustedPrice("slide", 3000), 5000);
     // Other tools are untouched.
     assert.equal(priceFor(TOOL_BY_ID.image, { imageCount: 1 }), 2000);
@@ -138,7 +138,7 @@ test("client registry: invisible on the server, applied in the browser, change d
 
   assert.equal(setClientPriceAdjustments({ slide: { percent: 150, roundTo: 500 } }), true, "roundTo change is a change");
   assert.equal(setClientPriceAdjustments(null), true, "cleared");
-  inBrowser(() => assert.equal(priceFor(slide, { slideCount: 10 }), 5750));
+  inBrowser(() => assert.equal(priceFor(slide, { slideCount: 10 }), 3000));
   assert.equal(setClientPriceAdjustments({ slide: { percent: 100, roundTo: 500 } }), false, "100 % = no adjustment");
 });
 

@@ -207,7 +207,7 @@ test("a proposal card in the bot: buttons fit 64 bytes, the tap starts ONE gener
   const card = msgs[1]!.body;
   assert.match(String(card.text), /Slayd/);
   assert.match(String(card.text), /Mavzu: Suv/);
-  assert.match(String(card.text).replace(/[\u00a0\u202f]/g, " "), /Narx: 5 750 so‘m/);
+  assert.match(String(card.text).replace(/[\u00a0\u202f]/g, " "), /Narx: 3 000 so‘m/);
   const buttons = card.reply_markup!.inline_keyboard.flat();
   assert.equal(buttons.length, 2);
   for (const b of buttons) assert.ok(Buffer.byteLength(b.callback_data) <= 64, b.callback_data);
@@ -229,14 +229,14 @@ test("a proposal card in the bot: buttons fit 64 bytes, the tap starts ONE gener
   assert.equal(await gens(owner.uid), 1);
   assert.match(toast(), /Boshlandi/);
   assert.ok(sent.some((c) => c.method === "editMessageReplyMarkup"), "the buttons are removed");
-  assert.equal(Number((await queryOne<{ b: string }>("SELECT (points + balance) AS b FROM users WHERE id = $1", [owner.uid]))!.b), 14_250);
+  assert.equal(Number((await queryOne<{ b: string }>("SELECT (points + balance) AS b FROM users WHERE id = $1", [owner.uid]))!.b), 17_000);
 
   // A second tap (or Telegram redelivery of another update).
   sent.length = 0;
   await tg.handleUpdate(cbUpdate(owner.tgId, yes.callback_data));
   assert.match(toast(), /allaqachon ishlatilgan/);
   assert.equal(await gens(owner.uid), 1);
-  assert.equal(Number((await queryOne<{ b: string }>("SELECT (points + balance) AS b FROM users WHERE id = $1", [owner.uid]))!.b), 14_250);
+  assert.equal(Number((await queryOne<{ b: string }>("SELECT (points + balance) AS b FROM users WHERE id = $1", [owner.uid]))!.b), 17_000);
 });
 
 test("«Bekor qilish» kills the token; a garbled callback is harmless", { skip }, async () => {

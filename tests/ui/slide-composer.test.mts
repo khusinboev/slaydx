@@ -59,13 +59,13 @@ test("tanlov o'zgarsa yig'iq sarlavha ergashadi: auditoriya select, test segment
   assert.ok(!chips().includes("Titul"), `titul o'chirilgach sarlavhadan ketadi: ${chips()}`);
 });
 
-test("slayder narxni DARHOL o'zgartiradi — priceFor bilan bir xil (oddiy: 25 → 14 000, pro: 25 → 40 000)", () => {
+test("slayder narxni DARHOL o'zgartiradi — priceFor bilan bir xil (oddiy: 25 → 11 250, pro: 25 → 40 000)", () => {
   mount("slide");
   assert.equal(price(), formatSom(priceFor(TOOL_BY_ID.slide, { slideCount: 10 })));
   fireEvent.change(slider(), { target: { value: "25" } });
-  assert.equal(price(), formatSom(14000)); // 3 000 + 20 × 550
+  assert.equal(price(), formatSom(11250)); // 3 000 + 15 × 550
   fireEvent.change(slider(), { target: { value: "30" } });
-  assert.equal(price(), formatSom(16750)); // 3 000 + 25 × 550
+  assert.equal(price(), formatSom(14000)); // 3 000 + 20 × 550
   cleanup();
   mount("pro-slide");
   fireEvent.change(slider(), { target: { value: "25" } });

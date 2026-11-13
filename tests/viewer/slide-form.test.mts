@@ -152,7 +152,7 @@ test("SlideForm: slaydlar soni slayderi (4–30) BOR, paketlar YO'Q, narx qoidas
   const step = priceFor(slideTool, { slideCount: SLIDE_INCLUDED + 1 }) - upTo;
   const rule = `${SLIDE_INCLUDED} slaydgacha ${formatSom(upTo)} · ${SLIDE_INCLUDED + 1}-slayddan har biri +${formatSom(step)}`;
   assert.ok(html.includes(esc(rule)), `narx qoidasi ko'rinadi: «${rule}»`);
-  assert.ok(html.includes(esc(`5 slaydgacha ${formatSom(3000)} · 6-slayddan har biri +${formatSom(550)}`)), "egasi qarori 2026-11-12: 5 tagacha 3 000, keyin +550");
+  assert.ok(html.includes(esc(`10 slaydgacha ${formatSom(3000)} · 11-slayddan har biri +${formatSom(550)}`)), "egasi qarori 2026-11-13: 10 tagacha 3 000, keyin +550");
   const expected = esc(formatSom(priceFor(slideTool, { slideCount: SLIDE_DEFAULT })));
   assert.ok(html.includes(expected), `standart narx «${expected}» ko'rinmayapti`);
   assert.ok(!html.includes("Rasm uslubi"), "oddiy slaydda rasm uslubi yo'q — bepul stock faqat foto");

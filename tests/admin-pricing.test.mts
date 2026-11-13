@@ -135,7 +135,7 @@ test("every tool has a ladder whose base is exactly basePriceFor/priceFor of its
     });
   }
   // Tier tables, not constants: the ladders follow the registry.
-  assert.deepEqual(ap.ladderFor("slide").map((s) => s.base), [3000, 3000, 5750, 16750]);
+  assert.deepEqual(ap.ladderFor("slide").map((s) => s.base), [3000, 3000, 14000]);
   assert.deepEqual(ap.ladderFor("pro-slide").map((s) => s.base), [6400, 19200, 48000]);
   // `rasm`: Gemini (today's labels and prices) first, then the ChatGPT table (2x).
   assert.deepEqual(ap.ladderFor("image").map((s) => s.base), [2000, 3500, 6000, 4000, 7000, 12000]);
@@ -150,9 +150,9 @@ test("every tool has a ladder whose base is exactly basePriceFor/priceFor of its
   const eff = ap.effectiveLadder(ap.ladderFor("slide"), { percent: 120, roundTo: 500 });
   assert.deepEqual(
     eff.map((s) => s.effective),
-    [3000, 3000, 5750, 16750].map((b) => applyPriceAdjust(b, { percent: 120, roundTo: 500 })),
+    [3000, 3000, 14000].map((b) => applyPriceAdjust(b, { percent: 120, roundTo: 500 })),
   );
-  assert.deepEqual(ap.effectiveLadder(ap.ladderFor("slide"), null).map((s) => s.effective), [3000, 3000, 5750, 16750]);
+  assert.deepEqual(ap.effectiveLadder(ap.ladderFor("slide"), null).map((s) => s.effective), [3000, 3000, 14000]);
 });
 
 test("recommendedPercent: toward the target markup, 5 % steps, clamped, null without a markup", () => {
@@ -372,10 +372,10 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
   const j5 = await seedJob({ user: quotaUser, toolId: "essay", values: { essayContext: "school_dtm", pages: "3" }, createdAt: tk(D1, "09:00:00"), status: "QUEUED" });
   assert.deepEqual([j1.price, j2.price, j3.price, j4.price, j5.price], [2500, 3500, 2000, 2500, 3000]);
 
-  // ---- slide (unit: slide; 3 000 up to 5 slides, +550 each after) ----------
-  // S1: 10 slides → 3 000 + 5 × 550 = 5 750.
+  // ---- slide (unit: slide; 3 000 up to 10 slides, +550 each after) ---------
+  // S1: 10 slides → 3 000 (included).
   const s1 = await seedJob({ user: cashUser, toolId: "slide", values: { slideCount: 10 }, createdAt: tk(D, "08:00:00"), finishedAt: tk(D, "08:10:00"), usage: { outcome: "completed", usd: 0.1 } });
-  // S2: 30 slides → 3 000 + 25 × 550 = 16 750; finished the next day; cost in BOTH cost_json and ai_usage → counted once.
+  // S2: 30 slides → 3 000 + 20 × 550 = 14 000; finished the next day; cost in BOTH cost_json and ai_usage → counted once.
   const s2 = await seedJob({
     user: cashUser,
     toolId: "slide",
@@ -385,9 +385,9 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     costJson: { provider: "gemini", model: "x", inputTokens: 1, outputTokens: 1, calls: 1, usd: 0.3 },
     usage: { outcome: "completed", usd: 0.3 },
   });
-  // S3: 20 slides → 3 000 + 15 × 550 = 11 250; created BEFORE the range, finished inside it → in completed/cost, not in jobs/revenue.
+  // S3: 20 slides → 3 000 + 10 × 550 = 8 500; created BEFORE the range, finished inside it → in completed/cost, not in jobs/revenue.
   const s3 = await seedJob({ user: cashUser, toolId: "slide", values: { slideCount: 20 }, createdAt: tk(D_BEFORE, "20:00:00"), finishedAt: tk(D, "01:00:00"), usage: { outcome: "completed", usd: 0.2 } });
-  assert.deepEqual([s1.price, s2.price, s3.price], [5750, 16750, 11250]);
+  assert.deepEqual([s1.price, s2.price, s3.price], [3000, 14000, 8500]);
 
   // ---- translation (unit: 1 000 chars) and image (unit: image, default 1) --
   await seedJob({ user: cashUser, toolId: "translation", values: { sourceAssetId: "a", sourceChars: 15_000, sourceText: "" }, createdAt: tk(D1, "10:00:00"), finishedAt: tk(D1, "10:30:00"), usage: { outcome: "completed", usd: 0.5 } });
@@ -470,10 +470,10 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
   await t.test("slide: two time bases, dedupe, abandoned overhead, units from slideCount", async () => {
     const r = await list(owner.cookie, RANGE);
     const s = itemOf(r, "slide");
-    // Orders: S1 + S2 (S3 was created before the range): (5 750 + 16 750) ÷ 2 = 11 250.
+    // Orders: S1 + S2 (S3 was created before the range): (3 000 + 14 000) ÷ 2 = 8 500.
     assert.equal(s.jobs, 2);
-    assert.equal(s.avgPrice, 11250);
-    assert.equal(s.avgCashRevenue, 11250);
+    assert.equal(s.avgPrice, 8500);
+    assert.equal(s.avgCashRevenue, 8500);
     assert.equal(s.avgUnits, 20);
     assert.equal(s.refundRate, 0);
     // Outcomes: S1, S2, S3 all finished inside the range.
@@ -488,20 +488,20 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     assert.equal(s.overheadSoum, 240);
     assert.equal(s.fullCostSoum, 2640);
     assert.equal(s.costPerUnitSoum, 132);
-    // PRIMARY: S1 + S2 + S3 = 5 750 + 16 750 + 11 250 = 33 750 ÷ 3 = 11 250 (S3 counts: it FINISHED in the range).
-    assert.equal(s.avgRevenue, 11250);
-    // margin (11 250 − 2 640) ÷ 11 250 = 76.53 %; markup 11 250 ÷ 2 640 = 4.261.
-    assert.equal(s.marginPct, 76.53);
-    assert.equal(s.markup, 4.261);
-    // CASH margin (earlier formula, over the 2 jobs CREATED in the range): (11 250 − 2 640) ÷ 11 250 = 76.53 %.
-    assert.equal(s.cashMarginPct, 76.53);
+    // PRIMARY: S1 + S2 + S3 = 3 000 + 14 000 + 8 500 = 25 500 ÷ 3 = 8 500 (S3 counts: it FINISHED in the range).
+    assert.equal(s.avgRevenue, 8500);
+    // margin (8 500 − 2 640) ÷ 8 500 = 68.94 %; markup 8 500 ÷ 2 640 = 3.22.
+    assert.equal(s.marginPct, 68.94);
+    assert.equal(s.markup, 3.22);
+    // CASH margin (earlier formula, over the 2 jobs CREATED in the range): (8 500 − 2 640) ÷ 8 500 = 68.94 %.
+    assert.equal(s.cashMarginPct, 68.94);
     // All paid in money: a 0 % points share (not null) and no bonus cost.
     assert.equal(s.pointsSharePct, 0);
     assert.equal(s.bonusCostSoum, 0);
     assert.equal(s.coveragePct, 100);
     assert.equal(s.jobsWithCost, 3);
-    // 100 × 3 ÷ 4.2614 = 70.4 → 70.
-    assert.equal(s.recommendedPercent, 70);
+    // 100 × 3 ÷ 3.2197 = 93.2 → 95.
+    assert.equal(s.recommendedPercent, 95);
     assert.deepEqual(s.trend, [
       // D: S1 (0.10) + S3 (0.20) completed, no overhead that day → 0.15 USD = 1 800.
       { day: D, avgCostSoum: 1800, jobs: 2 },
@@ -539,7 +539,7 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     const totals = r.body.totals as Record<string, number | null>;
     assert.equal(totals.jobs, 5 + 2 + 1 + 1);
     assert.equal(totals.completed, 3 + 3 + 1 + 1);
-    assert.equal(totals.cashRevenue, 9000 + 22500 + 4000 + 2000);
+    assert.equal(totals.cashRevenue, 9000 + 17000 + 4000 + 2000);
     const tools = 0.14 + 0.66 + 0.5 + 0.034;
     near(totals.costUsdTools, tools, "costUsdTools", 1e-6);
     near(totals.costSoumTools, tools * FX, "costSoumTools");
@@ -549,20 +549,20 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     const spendRange = parseDateRange(D, D2);
     near(totals.costUsdAll, (await cost.spendTotals(pool(), spendRange)).usd, "MUTATSIYA: all = spendTotals (dashboard aiCostUsd)", 1e-6);
     near(totals.costUsdAll, (await aiCost(spendRange, "tool")).totals.usd, "all = AI page total", 1e-6);
-    // PRIMARY: the completed jobs' listed revenue (essay 8 000 + slide 33 750 + translation 4 000 + image 2 000) against the tools' cost.
-    assert.equal(totals.revenue, 47750);
-    assert.equal(totals.revenueSoum, 47750 * SOUM_PER_COIN);
+    // PRIMARY: the completed jobs' listed revenue (essay 8 000 + slide 25 500 + translation 4 000 + image 2 000) against the tools' cost.
+    assert.equal(totals.revenue, 39500);
+    assert.equal(totals.revenueSoum, 39500 * SOUM_PER_COIN);
     assert.equal(totals.feeSoum, 0);
     // The headline cost is the UNIT cost × completed jobs per tool (essay 800 × 3, slide 2 640 × 3, translation 6 000,
     // image 408 = 16 728), not the raw spend: essay J3 has no cost data and must not count as free.
-    assert.equal(totals.marginRevenueSoum, 47750);
+    assert.equal(totals.marginRevenueSoum, 39500);
     assert.equal(totals.marginCostSoum, 16728);
     assert.deepEqual(totals.uncoveredTools, []);
-    near(totals.marginPct, ((47750 - 16728) / 47750) * 100, "marginPct from unit costs");
-    // CASH (earlier formula): the 37 500 of wallet cash, same tools' cost.
-    near(totals.cashMarginPct, ((37500 - tools * FX) / 37500) * 100, "cashMarginPct from tools cost");
-    // J3 is the only points job: 2 000 of the 47 750 the completed jobs paid.
-    near(totals.pointsSharePct, (2000 / 47750) * 100, "pointsSharePct");
+    near(totals.marginPct, ((39500 - 16728) / 39500) * 100, "marginPct from unit costs");
+    // CASH (earlier formula): the 32 000 of wallet cash, same tools' cost.
+    near(totals.cashMarginPct, ((32000 - tools * FX) / 32000) * 100, "cashMarginPct from tools cost");
+    // J3 is the only points job: 2 000 of the 39 500 the completed jobs paid.
+    near(totals.pointsSharePct, (2000 / 39500) * 100, "pointsSharePct");
     near(totals.bonusCostSoum, 420, "bonusCostSoum = essay's only");
   });
 
@@ -572,7 +572,7 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     assert.equal(r.body.soumPerCoin, SOUM_PER_COIN);
     const e1 = itemOf(r, "essay");
     assert.equal(e1.avgCashRevenueSoum, (e1.avgCashRevenue as number) * SOUM_PER_COIN);
-    assert.equal((r.body.totals as { cashRevenueSoum: number }).cashRevenueSoum, 37500 * SOUM_PER_COIN);
+    assert.equal((r.body.totals as { cashRevenueSoum: number }).cashRevenueSoum, 32000 * SOUM_PER_COIN);
 
     // Injected rate 2 so'm per tanga: every tanga figure doubles in so'm, costs stay.
     const o = await ap.pricingOverview(parseDateRange(D, D2), { soumPerCoin: 2 });
@@ -590,16 +590,16 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     assert.equal(e.markup, 6.667);
     assert.equal(e.recommendedPercent, 45);
     const s = o.items.find((i) => i.toolId === "slide")!;
-    // (22 500 − 2 640) ÷ 22 500 = 88.27 %; cash (22 500 − 2 640) ÷ 22 500 = 88.27 %.
-    assert.equal(s.marginPct, 88.27);
-    assert.equal(s.cashMarginPct, 88.27);
-    assert.equal(o.totals.cashRevenue, 37500);
-    assert.equal(o.totals.cashRevenueSoum, 75000);
-    assert.equal(o.totals.revenue, 47750);
-    assert.equal(o.totals.revenueSoum, 95500);
+    // (17 000 − 2 640) ÷ 17 000 = 84.47 %; cash (17 000 − 2 640) ÷ 17 000 = 84.47 %.
+    assert.equal(s.marginPct, 84.47);
+    assert.equal(s.cashMarginPct, 84.47);
+    assert.equal(o.totals.cashRevenue, 32000);
+    assert.equal(o.totals.cashRevenueSoum, 64000);
+    assert.equal(o.totals.revenue, 39500);
+    assert.equal(o.totals.revenueSoum, 79000);
     const tools = 0.14 + 0.66 + 0.5 + 0.034;
-    near(o.totals.marginPct, ((95500 - 16728) / 95500) * 100, "totals primary margin on so'm revenue");
-    near(o.totals.cashMarginPct, ((75000 - tools * FX) / 75000) * 100, "totals cash margin on so'm revenue");
+    near(o.totals.marginPct, ((79000 - 16728) / 79000) * 100, "totals primary margin on so'm revenue");
+    near(o.totals.cashMarginPct, ((64000 - tools * FX) / 64000) * 100, "totals cash margin on so'm revenue");
 
     const sim = await ap.simulatePricing("essay", { percent: 120, roundTo: 500 }, { soumPerCoin: 2 });
     assert.equal(sim.soumPerCoin, 2);
@@ -644,7 +644,7 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     assert.deepEqual(prev.totals, direct.body.totals, "previous totals = the list of that range");
     // Only S3 was CREATED there (orders basis); nothing finished there, so no margin.
     assert.equal(prev.totals.jobs, 1);
-    assert.equal(prev.totals.cashRevenue, 11250);
+    assert.equal(prev.totals.cashRevenue, 8500);
     assert.equal(prev.totals.completed, 0);
     assert.equal(prev.totals.marginPct, null);
     assert.notDeepEqual(prev.totals, r.body.totals);
@@ -719,7 +719,7 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     assert.deepEqual(trend.find((p) => p.day === D), { day: D, avgCostSoum: 1800, jobs: 2 });
     assert.deepEqual(trend.find((p) => p.day === D1), { day: D1, avgCostSoum: 3600, jobs: 1 });
     assert.deepEqual(r.body.history, []);
-    assert.deepEqual((r.body.ladder as { base: number }[]).map((s) => s.base), [3000, 3000, 5750, 16750]);
+    assert.deepEqual((r.body.ladder as { base: number }[]).map((s) => s.base), [3000, 3000, 14000]);
     assert.equal(r.body.fx, FX);
     const short = await detail(owner.cookie, "slide", "?days=7");
     assert.equal((short.body.trend as unknown[]).length, 7);
