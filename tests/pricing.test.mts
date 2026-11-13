@@ -92,17 +92,17 @@ test("noma'lum hajm — standart narx, 0 emas", () => {
   assert.ok(priceFor(TOOL_BY_ID.referat, { pages: "999" }) > 0);
 });
 
-test("slayd narxi slayderdan: 5 tagacha 3 000, 6-slayddan har biri +550 (paket yo'q)", () => {
+test("slayd narxi slayderdan: 10 tagacha 3 000, 11-slayddan har biri +550 (paket yo'q)", () => {
   const slide = TOOL_BY_ID.slide;
-  assert.equal(priceFor(slide, {}), 5750, "standart 10 slayd = 3 000 + 5 × 550");
+  assert.equal(priceFor(slide, {}), 3000, "standart 10 slayd kiradi");
   assert.equal(priceFor(slide, { slideCount: 5 }), 3000);
-  assert.equal(priceFor(slide, { slideCount: 6 }), 3550);
-  assert.equal(priceFor(slide, { slideCount: 20 }), 11250);
-  assert.equal(priceFor(slide, { slideCount: 25 }), 14000);
-  assert.equal(priceFor(slide, { slideCount: 30 }), 16750);
-  assert.equal(priceFor(slide, { slideCount: 999 }), 16750, "30 dan yuqori qisiladi");
+  assert.equal(priceFor(slide, { slideCount: 11 }), 3550);
+  assert.equal(priceFor(slide, { slideCount: 20 }), 8500);
+  assert.equal(priceFor(slide, { slideCount: 25 }), 11250);
+  assert.equal(priceFor(slide, { slideCount: 30 }), 14000);
+  assert.equal(priceFor(slide, { slideCount: 999 }), 14000, "30 dan yuqori qisiladi");
   // Eski paket qiymati bilan aldash — narxga ta'sir qilmaydi.
-  assert.equal(priceFor(slide, { quality: "premium_long" }), 5750);
+  assert.equal(priceFor(slide, { quality: "premium_long" }), 3000);
   assert.equal(priceFor(slide, { slideCount: -5 }), 3000, "4 ga qisiladi");
 });
 

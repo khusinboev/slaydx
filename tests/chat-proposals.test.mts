@@ -61,8 +61,8 @@ test("AI chat proposals and confirmation", { skip }, async (t) => {
     for (const id of ["resume", "translation", "portrait"]) assert.ok(!pack.includes(`- ${id} |`), `${id} is not a chat tool`);
     assert.ok(pack.includes(TOOL_BY_ID.slide.title) && pack.includes(TOOL_BY_ID.slide.description));
     assert.ok(pack.includes("slideCount=4: 3 000 so'm"), pack.split("\n").find((l) => l.startsWith("- slide |")));
-    assert.ok(pack.includes("slideCount=10: 5 750 so'm"), "the form's default 10 slides = 3 000 + 5 × 550");
-    assert.ok(pack.includes("slideCount=30: 16 750 so'm"));
+    assert.ok(pack.includes("slideCount=10: 3 000 so'm"), "the form's default 10 slides are included in 3 000");
+    assert.ok(pack.includes("slideCount=30: 14 000 so'm"));
     assert.ok(pack.includes(`slideCount=4: ${priceFor(TOOL_BY_ID["pro-slide"], { slideCount: 4 }).toLocaleString("uz-UZ").replace(/ /g, " ")} so'm`) || pack.includes("slideCount=4: 8 000 so'm"));
     assert.ok(pack.includes("https://t.me/SlaydX_support"), "support link");
     assert.ok(pack.includes("2 000 bonus so'm"), "signup bonus");
@@ -131,7 +131,7 @@ test("AI chat proposals and confirmation", { skip }, async (t) => {
     const card = confirmCard(r);
     assert.equal(card.tool, "slide");
     assert.equal(card.price, priceFor(TOOL_BY_ID.slide, { topic: "Suv", slideCount: 10 }));
-    assert.equal(card.price, 5750);
+    assert.equal(card.price, 3000);
     assert.ok(card.params.some((p) => p.label === "Mavzu" && p.value === "Suv"));
     assert.ok(card.params.some((p) => p.label === "Slaydlar soni" && p.value === "10"));
     assert.match(card.token, /^[A-Za-z0-9_-]{43}$/);
@@ -358,9 +358,9 @@ test("AI chat proposals and confirmation", { skip }, async (t) => {
     const uid = await mkUser(query, { balance: 1000 });
     const card = confirmCard(await ask(uid, SUV));
     const r = await props.confirmProposal({ userId: uid, token: card.token, hash: card.hash });
-    assert.deepEqual(r, { ok: false, reason: "insufficient", required: 5750, available: 1000 });
+    assert.deepEqual(r, { ok: false, reason: "insufficient", required: 3000, available: 1000 });
     assert.equal(await gens(uid), 0);
-    await query("UPDATE users SET balance = 6000 WHERE id = $1", [uid]);
+    await query("UPDATE users SET balance = 5000 WHERE id = $1", [uid]);
     const again = await props.confirmProposal({ userId: uid, token: card.token, hash: card.hash });
     assert.equal(again.ok, true, JSON.stringify(again));
     assert.equal(await gens(uid), 1);
@@ -372,8 +372,8 @@ test("AI chat proposals and confirmation", { skip }, async (t) => {
     await query("INSERT INTO tool_pricing (tool_id, percent, round_to) VALUES ('slide', 150, 100) ON CONFLICT (tool_id) DO UPDATE SET percent = 150, round_to = 100");
     (await import("../lib/server/pricing.ts")).invalidatePricingCache();
     const r = await props.confirmProposal({ userId: uid, token: card.token, hash: card.hash });
-    // 5 750 × 150 % = 8 625 → rounded to 100 = 8 600.
-    assert.deepEqual(r, { ok: false, reason: "price_changed", price: 8600 });
+    // 3 000 × 150 % = 4 500.
+    assert.deepEqual(r, { ok: false, reason: "price_changed", price: 4500 });
     assert.equal(await gens(uid), 0);
     await query("DELETE FROM tool_pricing WHERE tool_id = 'slide'");
     (await import("../lib/server/pricing.ts")).invalidatePricingCache();

@@ -52,15 +52,15 @@ export const SLIDE_MAX = PRO_SLIDE_MAX;
 
 /**
  * Oddiy slayd: pro bilan BIR XIL slayder (4–30), lekin narx paket emas,
- * formula — `SLIDE_INCLUDED` (5) tagacha bitta narx, keyingi har slayd
- * `SLIDE_EXTRA_PRICE` (egasi qarori 2026-11-12: «5 ta list 3 000 so'm, 6-listdan
- * boshlab har biri 550 so'm»; ilgari 20 tagacha 3 000, keyin +500 edi):
- * 10 slayd = 5 750, 20 = 11 250, 30 = 16 750.
+ * formula — `SLIDE_INCLUDED` (10) tagacha bitta narx, keyingi har slayd
+ * `SLIDE_EXTRA_PRICE` (egasi qarori 2026-11-13: «10 varoqqacha 3 000 so'm», 11-dan
+ * har biri 550 so'm; 2026-11-12 da 5 tagacha edi, undan oldin 20 tagacha 3 000 + 500):
+ * 10 slayd = 3 000, 20 = 8 500, 30 = 14 000.
  */
 export const SLIDE_MIN = PRO_SLIDE_MIN;
 export const SLIDE_DEFAULT = 10;
 export const SLIDE_BASE_PRICE = 3000;
-export const SLIDE_INCLUDED = 5;
+export const SLIDE_INCLUDED = 10;
 export const SLIDE_EXTRA_PRICE = 550;
 
 /** Oddiy slayd narxi — `priceFor` (server) va forma bitta formuladan. */

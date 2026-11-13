@@ -45,7 +45,7 @@ import type { DocMeta, SlideImageReport } from "./types";
 
 /** Policy of the hybrid stage — from settings (`slideImagePolicy`), or given by a test. */
 export type SlideImagePolicy = { aiFallback: boolean; aiMax: number };
-/** 4 × ≈ $0.034 stays under the cheapest plain deck price (3 000 so'm, 4–5 slides); the admin may raise it (`slide.image_ai_max`). */
+/** 4 × ≈ $0.034 stays under the cheapest plain deck price (3 000 so'm, 4–10 slides); the admin may raise it (`slide.image_ai_max`). */
 export const DEFAULT_SLIDE_IMAGE_POLICY: SlideImagePolicy = { aiFallback: true, aiMax: 4 };
 
 /** Hits asked per provider per query; candidates kept per slot for the judge. */

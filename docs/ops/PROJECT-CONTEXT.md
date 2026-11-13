@@ -34,8 +34,8 @@ owner's private notes); only names, mechanics and decisions. Updated by whoever 
 | `admin.wallet_confirm_threshold` | wallet correction needs re-typed amount above this | default |
 Prices: one place, `priceFor` (server); admin «Narxlar» page adjusts 25–1000 % per tool with rounding (100/500/1000) and shows cost, margin
 (listed-revenue and cash), bonus cost; admin test jobs are excluded unless «Adminlar bilan». Credits only through `lib/server/credits.ts`
-(points = 1 so'm). Plain «Slayd» (owner 2026-11-12): 3 000 so'm up to 5 slides, +550 per slide from the 6th
-(4–30: 10 = 5 750, 20 = 11 250, 30 = 16 750; `slidePrice` in `lib/generation/slide-params.ts`); «Pro slayd» 1 600 per slide.
+(points = 1 so'm). Plain «Slayd» (owner 2026-11-13): 3 000 so'm up to 10 slides, +550 per slide from the 11th
+(4–30: 10 = 3 000, 20 = 8 500, 30 = 14 000; `slidePrice` in `lib/generation/slide-params.ts`); «Pro slayd» 1 600 per slide.
 
 ## 4. Payments (Click)
 - Only Click is live (Payme later). Keys are the four `CLICK_*` env names in `.env.example`. Prepare = Complete URL = `/api/payments/click`.
