@@ -234,6 +234,32 @@ test("the bot moved the defence (an answer sent in the bot): the chat hands over
   await waitFor(() => assert.equal(toBot, 1));
 });
 
+test("a new question scrolls the composer into view (not on the first load)", async () => {
+  const proto = (window as unknown as { HTMLElement: { prototype: Record<string, unknown> } }).HTMLElement.prototype;
+  const had = proto.scrollIntoView;
+  let scrolled = 0;
+  proto.scrollIntoView = () => void scrolled++;
+  try {
+    let answered = false;
+    stub({
+      chat: () => (answered ? { ...BASE_CHAT, asked: [...Q, { idx: 2, text: "Uchinchi savol matni?", audio: false }], waiting: 2 } : BASE_CHAT),
+      post: () => {
+        answered = true;
+        return json(200, { ok: true, idx: 1 });
+      },
+    });
+    render(chat());
+    await waitFor(() => assert.ok(q("[data-domla-text]")));
+    assert.equal(scrolled, 0, "the first load does not jump");
+    fireEvent.change(q("[data-domla-text]")!, { target: { value: "javob" } });
+    fireEvent.click(q("[data-domla-send]")!);
+    await waitFor(() => assert.ok(q('[data-domla-question="2"]')));
+    assert.equal(scrolled, 1);
+  } finally {
+    proto.scrollIntoView = had;
+  }
+});
+
 /* ───────────────────────── the page ───────────────────────── */
 
 const WORKS = [{ id: "w-1", toolId: "slide", topic: "Fotosintez", slides: 8, createdAt: "2026-10-20T10:00:00Z" }];

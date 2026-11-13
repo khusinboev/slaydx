@@ -82,7 +82,7 @@ function QuestionVoice({ sessionId, idx }: { sessionId: string; idx: number }) {
     };
   }, [path]);
   if (!src) return null;
-  return <audio controls preload="metadata" src={src} data-domla-voice={idx} className="mt-2 h-10 w-full max-w-full" />;
+  return <audio controls preload="metadata" src={src} data-domla-voice={idx} className="mt-2 block h-10 w-64 max-w-full" />;
 }
 
 function DomlaBubble({ children, ...rest }: { children: React.ReactNode } & Record<`data-${string}`, unknown>) {
@@ -164,6 +164,16 @@ export function DomlaChat({
   useEffect(() => {
     if (pending && chat?.answers.some((a) => a.idx === pending.idx)) setPending(null);
   }, [chat, pending]);
+
+  // A new question (not the first load) brings the composer into view: the student answers without scrolling.
+  const seen = useRef<number | null>(null);
+  const bottom = useRef<HTMLDivElement | null>(null);
+  const askedCount = chat?.asked.length ?? null;
+  useEffect(() => {
+    if (askedCount === null) return;
+    if (seen.current !== null && askedCount > seen.current) bottom.current?.scrollIntoView?.({ block: "end", behavior: "smooth" });
+    seen.current = askedCount;
+  }, [askedCount]);
 
   // A recording never outlives the page.
   useEffect(
@@ -402,7 +412,7 @@ export function DomlaChat({
       ) : null}
 
       {chat.status === "active" ? (
-        <div className="mt-4 flex flex-col gap-2" data-domla-composer>
+        <div ref={bottom} className="mt-4 flex flex-col gap-2 scroll-mb-24" data-domla-composer>
           {rec ? (
             <div className="flex items-center gap-2" data-domla-recording>
               <span className="bg-destructive size-3 animate-pulse rounded-full" aria-hidden />
