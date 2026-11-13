@@ -234,6 +234,133 @@ test("the bot moved the defence (an answer sent in the bot): the chat hands over
   await waitFor(() => assert.equal(toBot, 1));
 });
 
+/* review fixes: the microphone is always given back; polling stops on a gone session; a stale echo goes */
+
+type Track = { stopped: boolean; stop: () => void };
+function fakeMic(opts: { pending?: Promise<void>; recorderThrows?: "options" | "always" } = {}): { tracks: Track[]; ctorCalls: unknown[] } {
+  const tracks: Track[] = [];
+  const ctorCalls: unknown[] = [];
+  class Rec {
+    static isTypeSupported = () => true;
+    state = "inactive";
+    mimeType = "audio/webm";
+    ondataavailable: ((e: { data: Blob }) => void) | null = null;
+    onstop: (() => void) | null = null;
+    constructor(_s: unknown, o?: unknown) {
+      ctorCalls.push(o ?? null);
+      if (opts.recorderThrows === "always" || (opts.recorderThrows === "options" && o)) throw new Error("NotSupportedError");
+    }
+    start() {
+      this.state = "recording";
+    }
+    stop() {
+      this.state = "inactive";
+      this.ondataavailable?.({ data: new Blob([new Uint8Array([1])]) });
+      this.onstop?.();
+    }
+  }
+  w.MediaRecorder = Rec;
+  Object.defineProperty(navigator, "mediaDevices", {
+    value: {
+      getUserMedia: async () => {
+        if (opts.pending) await opts.pending;
+        const t: Track = { stopped: false, stop: () => (t.stopped = true) };
+        tracks.push(t);
+        return { getTracks: () => [t] };
+      },
+    },
+    configurable: true,
+  });
+  return { tracks, ctorCalls };
+}
+
+test("mic: the page closing while the permission prompt is open still releases the microphone", async () => {
+  let allow!: () => void;
+  const { tracks } = fakeMic({ pending: new Promise<void>((r) => (allow = r)) });
+  stub();
+  const view = render(chat());
+  await waitFor(() => assert.ok(q("[data-domla-mic]")));
+  fireEvent.click(q("[data-domla-mic]")!);
+  view.unmount();
+  await act(async () => {
+    allow();
+    await new Promise((r) => setTimeout(r, 10));
+  });
+  assert.equal(tracks.length, 1);
+  assert.ok(tracks[0]!.stopped, "track.stop() after an unmount during getUserMedia");
+});
+
+test("mic: cancel releases the microphone and uploads nothing", async () => {
+  const { tracks } = fakeMic();
+  const calls = stub();
+  render(chat());
+  await waitFor(() => assert.ok(q("[data-domla-mic]")));
+  await act(async () => {
+    fireEvent.click(q("[data-domla-mic]")!);
+  });
+  await waitFor(() => assert.ok(q("[data-domla-rec-cancel]")));
+  await act(async () => {
+    fireEvent.click(q("[data-domla-rec-cancel]")!);
+  });
+  assert.ok(tracks[0]!.stopped);
+  assert.ok(!calls.some((c) => c.method === "POST"), "a cancelled recording is not sent");
+  assert.ok(!q("[data-domla-recording]"));
+});
+
+test("mic: a recorder that refuses the options is retried with defaults; one that refuses everything releases the mic and says so", async () => {
+  const a = fakeMic({ recorderThrows: "options" });
+  stub();
+  render(chat());
+  await waitFor(() => assert.ok(q("[data-domla-mic]")));
+  await act(async () => {
+    fireEvent.click(q("[data-domla-mic]")!);
+  });
+  await waitFor(() => assert.ok(q("[data-domla-recording]"), "recording with the default format"));
+  assert.equal(a.ctorCalls.length, 2);
+  assert.equal(a.ctorCalls[1], null, "the retry passes no options");
+  cleanup();
+
+  const b = fakeMic({ recorderThrows: "always" });
+  stub();
+  render(chat());
+  await waitFor(() => assert.ok(q("[data-domla-mic]")));
+  await act(async () => {
+    fireEvent.click(q("[data-domla-mic]")!);
+  });
+  await waitFor(() => assert.match(q("[data-domla-chat-error]")!.textContent!, /ovoz yozib bo‘lmadi/));
+  assert.ok(b.tracks[0]!.stopped, "the microphone is given back");
+  assert.ok(!q("[data-domla-recording]"));
+});
+
+test("polling stops after a 404 (the session is gone)", async () => {
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: unknown) => {
+    calls.push(String(input));
+    return json(404, { error: "Bu himoya topilmadi", code: "not_found" });
+  }) as typeof fetch;
+  render(chat());
+  await waitFor(() => assert.ok(q("[data-domla-chat-error]")));
+  await new Promise((r) => setTimeout(r, 2_300));
+  assert.equal(calls.length, 1, "no second poll after 404");
+});
+
+test("a «could not hear» notice for the answered question drops its pending echo bubble", async () => {
+  let answered = false;
+  stub({
+    chat: () => (answered ? { ...BASE_CHAT, notice: "Domla javobingizni eshita olmadi.", waiting: 1 } : BASE_CHAT),
+    post: () => {
+      answered = true;
+      return json(200, { ok: true, idx: 1 });
+    },
+  });
+  render(chat());
+  await waitFor(() => assert.ok(q("[data-domla-text]")));
+  fireEvent.change(q("[data-domla-text]")!, { target: { value: "javob" } });
+  fireEvent.click(q("[data-domla-send]")!);
+  await waitFor(() => assert.ok(q("[data-domla-notice]")));
+  await waitFor(() => assert.ok(!q('[data-domla-answer-pending="1"]'), "the echo is gone: the question waits again"));
+});
+
 test("a new question scrolls the composer into view (not on the first load)", async () => {
   const proto = (window as unknown as { HTMLElement: { prototype: Record<string, unknown> } }).HTMLElement.prototype;
   const had = proto.scrollIntoView;

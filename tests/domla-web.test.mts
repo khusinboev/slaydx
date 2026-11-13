@@ -606,3 +606,286 @@ test("web activity refreshes the 30-minute window (an answer and a channel move)
   assert.equal(late.status, 410);
   assert.equal((await svc.getSession(u.id, sessionId))!.status, "expired");
 });
+
+/* ───────────────────────── review fixes (2026-11-13) ───────────────────────── */
+
+const audioLen = await import("../lib/domla/audio-length.ts");
+
+function gate(): { p: Promise<void>; open: () => void } {
+  let open!: () => void;
+  const p = new Promise<void>((r) => (open = r));
+  return { p, open };
+}
+async function until(cond: () => boolean, ms = 5_000): Promise<void> {
+  const t0 = Date.now();
+  while (!cond()) {
+    if (Date.now() - t0 > ms) throw new Error("timeout waiting");
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
+/** Runs exactly one due job. */
+async function tickOnce(st: Stubs): Promise<boolean> {
+  await query("UPDATE domla_jobs SET run_after = now(), locked_until = NULL");
+  return engine.domlaTick(st.deps);
+}
+
+test("M1: «Botda davom etish» while the NEXT question's voice is being made -> the bot still gets that question, once", { skip }, async () => {
+  const { u, sessionId, st } = await webStarted();
+  assert.equal((await answerText(u.id, sessionId, "birinchi")).status, 200);
+  assert.ok(await tickOnce(st), "score:0 ran");
+  assert.deepEqual(await jobKinds(), ["ask:1"]);
+  // Question 2's voice hangs until released.
+  const g = gate();
+  let speaking = false;
+  const slow = {
+    ...st.deps,
+    synthesize: async (t: string) => {
+      st.spoken.push(t);
+      speaking = true;
+      await g.p;
+      return { bytes: VOICE, seconds: 4 };
+    },
+  };
+  calls = [];
+  await query("UPDATE domla_jobs SET run_after = now(), locked_until = NULL");
+  const running = engine.domlaTick(slow);
+  await until(() => speaking);
+  const moved = await svc.setChannel(u.id, sessionId, "bot");
+  assert.deepEqual(moved, { ok: true, channel: "bot", resent: false }, "asked == idx: setChannel cannot resend, the running job must");
+  g.open();
+  await running;
+  await drain(st);
+  const audio = sent("sendAudio");
+  assert.equal(audio.length, 1, "question 2 reached the bot exactly once");
+  assert.equal(audio[0]!.body.chat_id, String(u.tg));
+  assert.match(String(audio[0]!.body.caption), /Savol 2\/5/);
+  assert.equal(audio[0]!.audioBytes, VOICE.length);
+  assert.equal((await svc.getSession(u.id, sessionId))!.asked, 2);
+  assert.deepEqual(await jobKinds(), []);
+});
+
+test("M1: a move to the bot AFTER the web ask finished queues its own resend (no gap, no double)", { skip }, async () => {
+  const { u, sessionId, st } = await webStarted();
+  calls = [];
+  assert.deepEqual(await svc.setChannel(u.id, sessionId, "bot"), { ok: true, channel: "bot", resent: true });
+  await drain(st);
+  assert.equal(sent("sendAudio").length, 1);
+});
+
+test("M1: «Botda davom etish» while an answer is being scored -> the reaction and the next question go to the bot", { skip }, async () => {
+  const { u, sessionId, st } = await webStarted();
+  assert.equal((await answerText(u.id, sessionId, "saytdagi javob")).status, 200);
+  const g = gate();
+  let scoring = false;
+  const slow = {
+    ...st.deps,
+    score: async (input: import("../lib/server/domla-deps.ts").ScoreInput) => {
+      scoring = true;
+      await g.p;
+      return st.deps.score(input);
+    },
+  };
+  calls = [];
+  await query("UPDATE domla_jobs SET run_after = now(), locked_until = NULL");
+  const running = engine.domlaTick(slow);
+  await until(() => scoring);
+  assert.equal((await svc.setChannel(u.id, sessionId, "bot")).ok, true);
+  g.open();
+  await running;
+  assert.ok(sent().some((c) => /saytdagi javob/.test(String(c.body.text))), "the reaction went to the bot");
+  await drain(st);
+  assert.match(String(sent("sendAudio").at(-1)!.body.caption), /Savol 2\/5/);
+});
+
+test("m1: the housekeeping sweep drops audio of closed sessions and stale answer audio, keeps what a job still needs", { skip }, async () => {
+  const a = await webStarted();
+  // A closed session whose audio survived (a close racing a write).
+  await query("UPDATE domla_sessions SET status = 'finished', finished_at = now() WHERE id = $1", [a.sessionId]);
+  assert.equal((await audioRows(a.sessionId)).length, 1);
+  // An open session: one stale orphan answer (no score job), one old answer whose score job is still pending.
+  const b = await webStarted();
+  await query("INSERT INTO domla_audio (session_id, kind, idx, mime, bytes, created_at) VALUES ($1, 'answer', 3, 'audio/ogg', '\\x00', now() - interval '11 minutes')", [b.sessionId]);
+  assert.equal((await answerVoice(b.u.id, b.sessionId, webm(30))).status, 200);
+  await query("UPDATE domla_audio SET created_at = now() - interval '20 minutes' WHERE session_id = $1 AND kind = 'answer' AND idx = 0", [b.sessionId]);
+  await engine.domlaHousekeeping(b.st.deps);
+  assert.deepEqual(await audioRows(a.sessionId), [], "closed session: nothing left");
+  const left = await audioRows(b.sessionId);
+  assert.ok(left.some((r) => r.startsWith("question:0")), "an open session's question voice stays");
+  assert.ok(left.some((r) => r.startsWith("answer:0")), "an answer with a pending score job stays, however old");
+  assert.ok(!left.some((r) => r.startsWith("answer:3")), "an orphan answer older than 10 min goes");
+});
+
+/* m2: lengths measured from the bytes */
+function wav(seconds: number, byteRate = 8000): Uint8Array {
+  const data = Math.round(seconds * byteRate);
+  const b = new Uint8Array(44 + data);
+  const v = new DataView(b.buffer);
+  b.set(new TextEncoder().encode("RIFF"), 0);
+  v.setUint32(4, 36 + data, true);
+  b.set(new TextEncoder().encode("WAVEfmt "), 8);
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true);
+  v.setUint32(24, byteRate, true);
+  v.setUint32(28, byteRate, true);
+  v.setUint16(32, 1, true);
+  v.setUint16(34, 8, true);
+  b.set(new TextEncoder().encode("data"), 36);
+  v.setUint32(40, data, true);
+  return b;
+}
+function mp3(seconds: number): Uint8Array {
+  const b = new Uint8Array(Math.round(seconds * 4000)); // 32 kbit/s
+  b[0] = 0xff;
+  b[1] = 0xfb; // MPEG-1 Layer III
+  b[2] = 0x10; // bitrate index 1 = 32 kbit/s
+  return b;
+}
+function box(type: string, ...parts: Uint8Array[]): Uint8Array {
+  const len = 8 + parts.reduce((a, p) => a + p.length, 0);
+  const out = new Uint8Array(len);
+  new DataView(out.buffer).setUint32(0, len);
+  out.set(new TextEncoder().encode(type), 4);
+  let o = 8;
+  for (const p of parts) {
+    out.set(p, o);
+    o += p.length;
+  }
+  return out;
+}
+function u32s(...n: number[]): Uint8Array {
+  const b = new Uint8Array(n.length * 4);
+  n.forEach((x, i) => new DataView(b.buffer).setUint32(i * 4, x));
+  return b;
+}
+const FTYP = box("ftyp", new TextEncoder().encode("M4A "), u32s(0));
+/** mvhd v0: version/flags, created, modified, timescale, duration. */
+const mp4Mvhd = (seconds: number) => new Uint8Array([...FTYP, ...box("moov", box("mvhd", u32s(0, 0, 0, 1000, seconds * 1000, 0, 0, 0)))]);
+/** Fragmented (Safari): mvhd duration 0, mdhd timescale 48000, one moof: tfhd default duration 1024 + a trun of `samples`. */
+const mp4Frag = (samples: number) =>
+  new Uint8Array([
+    ...FTYP,
+    ...box("moov", box("mvhd", u32s(0, 0, 0, 1000, 0, 0, 0, 0)), box("trak", box("mdia", box("mdhd", u32s(0, 0, 0, 48000, 0, 0))))),
+    ...box("moof", box("traf", box("tfhd", u32s(0x08, 1, 1024)), box("trun", u32s(0, samples)))),
+  ]);
+
+test("m2: Ogg / WAV / MP3 / MP4 lengths come from the bytes; over 120 s is refused whatever the client claims", { skip }, async () => {
+  const ogg130 = remux.webmToOgg(webm(6500)).bytes;
+  assert.equal(audioLen.oggSeconds(ogg130), 130);
+  assert.equal(audioLen.wavSeconds(wav(130)), 130);
+  assert.equal(audioLen.mp3Seconds(mp3(150)), 150);
+  assert.equal(audioLen.mp4Seconds(mp4Mvhd(130)), 130);
+  assert.equal(Math.round(audioLen.mp4Seconds(mp4Frag(7000))!), 149);
+  assert.equal(audioLen.mp4Seconds(FTYP), null, "nothing to measure");
+  assert.equal(audioLen.minSeconds(3_840_000), 120);
+
+  const { u, sessionId } = await webStarted();
+  const cases: [string, Uint8Array][] = [["ogg", ogg130], ["wav", wav(130)], ["mp3", mp3(150)], ["mp4", mp4Mvhd(130)], ["mp4-frag", mp4Frag(7000)]];
+  for (const [name, bytes] of cases) {
+    const r = await answerVoice(u.id, sessionId, bytes, 5, "audio/whatever");
+    assert.equal(r.status, 413, name);
+    assert.equal((await r.json()).code, "too_long", name);
+  }
+  assert.deepEqual(await jobKinds(), [], "nothing was queued");
+  assert.equal((await answerVoice(u.id, sessionId, wav(20), 999)).status, 413, "a client claiming more than 120 s is refused too");
+  assert.equal((await answerVoice(u.id, sessionId, mp3(60), 1)).status, 200, "a 60 s MP3 passes");
+});
+
+function bigWebm(count: number, size: number): Uint8Array {
+  const header = el([0x1a, 0x45, 0xdf, 0xa3], el([0x42, 0x82], text("webm")));
+  const track = el([0xae], [...el([0xd7], [1]), ...el([0x86], text("A_OPUS")), ...el([0x63, 0xa2], OPUS_HEAD)]);
+  const blocks: number[] = [];
+  for (let i = 0; i < count; i++) blocks.push(...el([0xa3], [0x81, 0, 0, 0x80, 0xf8, ...new Array<number>(size - 1).fill(i & 0xff)]));
+  return new Uint8Array([...header, 0x18, 0x53, 0x80, 0x67, ...UNKNOWN, ...el([0x16, 0x54, 0xae, 0x6b], track), 0x1f, 0x43, 0xb6, 0x75, ...UNKNOWN, ...blocks]);
+}
+
+test("m4: big Opus packets are paged by lacing segments (never > 255), a packet that cannot fit a page is refused", () => {
+  const pages = oggPages(remux.webmToOgg(bigWebm(60, 1275)).bytes);
+  const audio = pages.slice(2).flatMap((p) => p.packets);
+  assert.equal(audio.length, 60, "every packet survives");
+  assert.ok(audio.every((p) => p.length === 1275));
+  // 1275 bytes = 6 lacing values: at most 42 such packets fit 255 segments.
+  assert.ok(pages.slice(2).every((p) => p.packets.length <= 42), "split by segments, not by a fixed 50");
+  assert.throws(() => remux.webmToOgg(bigWebm(1, 70_000)), remux.RemuxError);
+});
+
+test("m4: hostile WebM input only ever fails as RemuxError (huge sizes, 8-byte vints, truncated blocks, random bytes)", () => {
+  const header = el([0x1a, 0x45, 0xdf, 0xa3], el([0x42, 0x82], text("webm")));
+  const seg = [0x18, 0x53, 0x80, 0x67, ...UNKNOWN];
+  const cases: Uint8Array[] = [
+    new Uint8Array([...header, ...seg, 0x86, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 1, 2]), // a leaf claiming ~2^56 bytes
+    new Uint8Array([...header, ...seg, 0xa3, 0x01, 0, 0, 0, 0, 0, 0, 0x02, 0x81]), // a truncated block
+    new Uint8Array([...header, ...seg, 0xa3, 0x80]), // an empty block
+    new Uint8Array([...header, 0x00, 0x00, 0x00]), // an invalid id
+    new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x01]), // a truncated size vint
+    webm(10).subarray(0, 120), // cut mid-track
+  ];
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) >>> 16) & 0xff;
+  for (let i = 0; i < 200; i++) cases.push(new Uint8Array([...header, ...Array.from({ length: 64 }, rnd)]));
+  const t0 = Date.now();
+  for (const c of cases) {
+    try {
+      remux.webmToOgg(c);
+    } catch (e) {
+      assert.ok(e instanceof remux.RemuxError, `only RemuxError, got ${String(e)}`);
+    }
+  }
+  assert.ok(Date.now() - t0 < 2_000, "no hang");
+  // An 8-byte size vint with a small value is valid EBML (read correctly: this block's 4 bytes hold no packet).
+  const eight = new Uint8Array([...header, ...seg, ...el([0x16, 0x54, 0xae, 0x6b], el([0xae], [...el([0xd7], [1]), ...el([0x86], text("A_OPUS"))])), 0xa3, ...size8(4), 0x81, 0, 0, 0x80]);
+  assert.throws(() => remux.webmToOgg(eight), (e: unknown) => e instanceof remux.RemuxError && /audio yo/.test(e.message), "parsed to the end: no audio");
+  const eightOk = new Uint8Array([...header, ...seg, ...el([0x16, 0x54, 0xae, 0x6b], el([0xae], [...el([0xd7], [1]), ...el([0x86], text("A_OPUS"))])), 0xa3, ...size8(5), 0x81, 0, 0, 0x80, 0xf8]);
+  assert.equal(remux.webmToOgg(eightOk).seconds, 0.02);
+});
+
+test("a failed WEB defence: the whole charge comes back, no Telegram message", { skip }, async () => {
+  const u = await newUser();
+  const gen = await newWork(u.id);
+  const res = await call(startRoute.POST, u.id, "/api/domla", { method: "POST", json: { generationId: gen } });
+  const sid = (await res.json()).sessionId as string;
+  assert.equal(await points(u.id), 7000);
+  const st = makeStubs();
+  st.deps = {
+    ...st.deps,
+    generateQuestions: async () => {
+      throw new Error("AI savollar tuzmadi");
+    },
+  };
+  calls = [];
+  await drain(st);
+  const chat = await (await getChat(u.id, sid)).json();
+  assert.equal(chat.status, "failed");
+  assert.equal(await points(u.id), 10_000, "refunded");
+  assert.equal(tgMessages().length, 0);
+});
+
+test("web refusals: not_waiting while the next question is not out; audio idx >= asked / out of range; oversize chunked upload", { skip }, async () => {
+  const { u, sessionId, st } = await webStarted();
+  assert.equal((await answerText(u.id, sessionId, "javob")).status, 200);
+  assert.ok(await tickOnce(st), "score:0 ran; ask:1 is queued, not run");
+  const r = await answerText(u.id, sessionId, "erta javob");
+  assert.equal(r.status, 409);
+  assert.equal((await r.json()).code, "not_waiting");
+  for (const idx of ["1", "4", "5", "99", "-1", "1e1"]) assert.equal((await getAudio(u.id, sessionId, idx)).status, 404, idx);
+  // A chunked body with no Content-Length is cut at the limit.
+  const boundary = "----domla";
+  const chunk = new TextEncoder().encode("x".repeat(64 * 1024));
+  let sentBytes = 0;
+  const body = new ReadableStream<Uint8Array>({
+    start(c) {
+      c.enqueue(new TextEncoder().encode(`--${boundary}\r\nContent-Disposition: form-data; name="audio"; filename="a"\r\nContent-Type: audio/ogg\r\n\r\n`));
+    },
+    pull(c) {
+      if (sentBytes > 3 * 1024 * 1024) return c.close();
+      sentBytes += chunk.length;
+      c.enqueue(chunk);
+    },
+  });
+  const headers = { origin: "https://slaydx.test", cookie: `${SESSION_COOKIE}=${(await createSession(u.id)).token}`, "content-type": `multipart/form-data; boundary=${boundary}` };
+  const req = new Request(`https://slaydx.test/api/domla/sessions/${sessionId}/answer`, { method: "POST", headers, body, duplex: "half" } as RequestInit);
+  assert.equal(req.headers.get("content-length"), null);
+  const res = await inRequest(req, () => (answerRoute.POST as Handler)(req, { params: Promise.resolve({ id: sessionId }) }));
+  assert.equal(res.status, 413);
+  assert.ok(sentBytes < 3 * 1024 * 1024, "the reader stopped early");
+});

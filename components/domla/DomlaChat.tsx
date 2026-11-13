@@ -127,7 +127,8 @@ export function DomlaChat({
   const onBotRef = useRef(onBot);
   onBotRef.current = onBot;
 
-  const load = useCallback(async (): Promise<ChatState | null> => {
+  /** `"gone"`: the session is not there (404) or over (410) -- polling it again cannot help. */
+  const load = useCallback(async (): Promise<ChatState | null | "gone"> => {
     try {
       const s = await request<ChatState>(`/api/domla/sessions/${sessionId}`);
       setChat(s);
@@ -135,7 +136,7 @@ export function DomlaChat({
       return s;
     } catch (e) {
       setError(errText(e));
-      return null;
+      return e instanceof ApiError && (e.status === 404 || e.status === 410) ? "gone" : null;
     }
   }, [sessionId]);
 
@@ -143,8 +144,9 @@ export function DomlaChat({
   useEffect(() => {
     let live = true;
     const tick = async () => {
-      const s = await load();
-      if (!live) return;
+      const got = await load();
+      if (!live || got === "gone") return;
+      const s = got;
       if (s && s.channel === "bot" && (s.status === "active" || s.status === "preparing")) {
         onBotRef.current();
         return;
@@ -160,9 +162,11 @@ export function DomlaChat({
     };
   }, [load]);
 
-  // The local echo of an answer goes once the server has scored it.
+  // The local echo of an answer goes once the server has scored it -- or once it could not hear it (a notice, and the
+  // same question waits again): then the echo would claim an answer that does not exist.
   useEffect(() => {
-    if (pending && chat?.answers.some((a) => a.idx === pending.idx)) setPending(null);
+    if (!pending || !chat) return;
+    if (chat.answers.some((a) => a.idx === pending.idx) || (chat.notice && chat.waiting === pending.idx)) setPending(null);
   }, [chat, pending]);
 
   // A new question (not the first load) brings the composer into view: the student answers without scrolling.
@@ -176,8 +180,11 @@ export function DomlaChat({
   }, [askedCount]);
 
   // A recording never outlives the page.
-  useEffect(
-    () => () => {
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true; // (StrictMode re-runs effects: a remount is alive again)
+    return () => {
+      alive.current = false;
       const r = recorder.current;
       if (r) {
         r.cancel = true;
@@ -185,9 +192,8 @@ export function DomlaChat({
         r.stream.getTracks().forEach((t) => t.stop());
         if (r.mr.state !== "inactive") r.mr.stop();
       }
-    },
-    [],
-  );
+    };
+  }, []);
 
   const post = async (body: BodyInit, echo: Pending) => {
     setSending(true);
@@ -222,11 +228,29 @@ export function DomlaChat({
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      setError("Mikrofonga ruxsat berilmadi. Ruxsat bering yoki javobni yozib yuboring.");
+      if (alive.current) setError("Mikrofonga ruxsat berilmadi. Ruxsat bering yoki javobni yozib yuboring.");
+      return;
+    }
+    const release = () => stream.getTracks().forEach((t) => t.stop());
+    // The page closed while the permission prompt was open: give the microphone back at once.
+    if (!alive.current) {
+      release();
       return;
     }
     const mime = recorderMime();
-    const mr = new window.MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), audioBitsPerSecond: 32_000 });
+    let mr: MediaRecorder;
+    try {
+      mr = new window.MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), audioBitsPerSecond: 32_000 });
+    } catch {
+      try {
+        // Some WebViews refuse the options (format / bitrate): their defaults still record.
+        mr = new window.MediaRecorder(stream);
+      } catch {
+        release();
+        setError("Bu qurilmada ovoz yozib bo‘lmadi. Javobni yozib yuboring.");
+        return;
+      }
+    }
     const r = { mr, stream, chunks: [] as Blob[], started: Date.now(), cancel: false, timer: null as ReturnType<typeof setInterval> | null };
     recorder.current = r;
     const idx = chat.waiting;

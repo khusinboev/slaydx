@@ -217,30 +217,60 @@ function opusTags(): Uint8Array {
   return t;
 }
 
-/** Packets per audio page (each Opus packet is < 255 * 4 bytes, so the 255-segment limit is never reached). */
+/** At most this many packets on one audio page (fewer when their lacing would pass 255 segments). */
 const PACKETS_PER_PAGE = 50;
+/** One page holds at most 255 lacing values: a packet must fit in one page (no continuation pages are written). */
+const MAX_SEGMENTS = 255;
+/** The largest packet that fits one page (255 lacing values); a real Opus packet is at most 1275 bytes per frame. */
+export const MAX_PACKET_BYTES = 255 * (MAX_SEGMENTS - 1);
+
+/** Splits packets into pages: ≤ `PACKETS_PER_PAGE` packets and ≤ 255 lacing segments each. */
+function paginate(packets: Uint8Array[]): Uint8Array[][] {
+  const out: Uint8Array[][] = [];
+  let cur: Uint8Array[] = [];
+  let segs = 0;
+  for (const pk of packets) {
+    const n = Math.floor(pk.length / 255) + 1;
+    if (cur.length && (segs + n > MAX_SEGMENTS || cur.length >= PACKETS_PER_PAGE)) {
+      out.push(cur);
+      cur = [];
+      segs = 0;
+    }
+    cur.push(pk);
+    segs += n;
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
 
 /**
  * WebM/Opus -> Ogg/Opus. Returns the Ogg bytes and the length in seconds (from the packets' own durations, so a
  * client that lies about the length is measured, not trusted). Throws `RemuxError` on anything else.
  */
 export function webmToOgg(webm: Uint8Array, serial = 0x5d0a1a): { bytes: Uint8Array; seconds: number } {
-  const { head, channels, packets } = webmOpusPackets(webm);
+  let parsed: ReturnType<typeof webmOpusPackets>;
+  try {
+    parsed = webmOpusPackets(webm);
+  } catch (e) {
+    // Hostile bytes may only ever be «not readable», never another kind of failure.
+    throw e instanceof RemuxError ? e : new RemuxError(`WebM o‘qilmadi: ${e instanceof Error ? e.message : "xato"}`);
+  }
+  const { head, channels, packets } = parsed;
   if (packets.length === 0) throw new RemuxError("WebM ichida audio yo‘q");
+  if ((head && head.length > MAX_PACKET_BYTES) || packets.some((pk) => pk.length > MAX_PACKET_BYTES)) throw new RemuxError("WebM: Opus paketi juda katta");
   const pages: Uint8Array[] = [page([head ?? opusHead(channels)], BigInt(0), serial, 0, 0x02), page([opusTags()], BigInt(0), serial, 1, 0)];
   let granule = BigInt(0);
   let total = 0;
   let seq = 2;
-  for (let i = 0; i < packets.length; i += PACKETS_PER_PAGE) {
-    const chunk = packets.slice(i, i + PACKETS_PER_PAGE);
+  const chunks = paginate(packets);
+  chunks.forEach((chunk, i) => {
     for (const pk of chunk) {
       const n = opusPacketSamples(pk);
       total += n;
       granule += BigInt(n);
     }
-    const last = i + PACKETS_PER_PAGE >= packets.length;
-    pages.push(page(chunk, granule, serial, seq++, last ? 0x04 : 0));
-  }
+    pages.push(page(chunk, granule, serial, seq++, i === chunks.length - 1 ? 0x04 : 0));
+  });
   const len = pages.reduce((a, pg) => a + pg.length, 0);
   const out = new Uint8Array(len);
   let o = 0;

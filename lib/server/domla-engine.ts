@@ -26,8 +26,11 @@ import {
   deleteAnswerAudio,
   expireIdle,
   loadAudio,
+  queueResend,
+  releaseAsk,
   setNotice,
   storeQuestionAudio,
+  sweepAudio,
   failSession,
   failStuckPreparing,
   finishSession,
@@ -92,15 +95,36 @@ export function webButtonMarkup(): ReturnType<typeof rows> | undefined {
   return url ? rows([inlineButton(null, t("uz", "domla.webBtn"), { web_app: { url } })]) : undefined;
 }
 
+/**
+ * The channel NOW: the student may press «Botda / Saytda davom etish» while a job is synthesizing or scoring, so every
+ * send decision reads it again instead of trusting the value the job started with.
+ */
+async function channelNow(ctx: Ctx): Promise<DomlaChannel> {
+  const r = await queryOne<{ channel: string }>("SELECT channel FROM domla_sessions WHERE id = $1", [ctx.sessionId]);
+  ctx.channel = r?.channel === "web" ? "web" : r ? "bot" : ctx.channel;
+  return ctx.channel;
+}
+
 /** A bot-only message (reactions, the final verdict: the web chat shows them from the state). */
 async function say(ctx: Ctx, text: string, markup?: unknown): Promise<void> {
-  if (ctx.channel === "bot" && ctx.chatId) await ctx.deps.telegram.sendText(ctx.chatId, text, markup);
+  if ((await channelNow(ctx)) === "bot" && ctx.chatId) await ctx.deps.telegram.sendText(ctx.chatId, text, markup);
 }
 
 /** A notice the student must see on either channel: a bot message, or the web chat's notice line. */
 async function notify(ctx: Ctx, text: string): Promise<void> {
-  if (ctx.channel === "web") await setNotice(ctx.sessionId, text);
+  if ((await channelNow(ctx)) === "web") await setNotice(ctx.sessionId, text);
   else if (ctx.chatId) await ctx.deps.telegram.sendText(ctx.chatId, text);
+}
+
+/** Sends question `idx` to the bot chat: the voice (if any) with the caption, or the caption alone. */
+async function sendQuestionToBot(ctx: Ctx, s: DomlaSession, idx: number, audio: SpokenAudio | null, first: boolean): Promise<void> {
+  if (!ctx.chatId) return;
+  const q = s.questions[idx]!;
+  const caption = (first ? `${esc(GREETING)}\n\n` : "") + questionCaption(idx, s.questions.length, q);
+  const markup = webButtonMarkup();
+  let sent = false;
+  if (audio) sent = await ctx.deps.telegram.sendAudio(ctx.chatId, audio, caption, markup);
+  if (!sent) await ctx.deps.telegram.sendText(ctx.chatId, caption, markup);
 }
 
 /* ───────────────────────── questions ───────────────────────── */
@@ -153,19 +177,27 @@ async function runAsk(job: DomlaJob, s: DomlaSession & { chatId: string | null }
     const audio = await speak();
     if (audio && !stored) await storeQuestionAudio(s.id, idx, audio);
     await markAsked(s.id, idx);
+    // The student may have moved to the bot while the voice was being made. `releaseAsk` reads the channel and
+    // removes this job under the session lock that `setChannel` takes: a move BEFORE it is seen here (and its own
+    // resend of this idx was refused by this job's row), a move AFTER it queues its own resend. Never lost, never twice.
+    if ((await releaseAsk(job.id, s.id)) === "bot") {
+      try {
+        await sendQuestionToBot(ctx, s, idx, audio, first);
+      } catch (e) {
+        // This job's row is gone: hand the send to a fresh resend job instead of losing it.
+        log("warn", "[domla] savol botga yuborilmadi, qayta navbatga", { err: e, sessionId: s.id });
+        await queueResend(s.id, idx);
+      }
+    }
     return;
   }
 
-  const caption = (first ? `${esc(GREETING)}\n\n` : "") + questionCaption(idx, s.questions.length, q);
   if (!ctx.chatId) return;
   await ctx.deps.telegram.sendAction(ctx.chatId, "record_voice");
   const audio = await speak();
   // Kept for a move to the web (the first voice made for a question wins, a later take never replaces it).
   if (audio && !stored) await storeQuestionAudio(s.id, idx, audio);
-  const markup = webButtonMarkup();
-  let sent = false;
-  if (audio) sent = await ctx.deps.telegram.sendAudio(ctx.chatId, audio, caption, markup);
-  if (!sent) await ctx.deps.telegram.sendText(ctx.chatId, caption, markup);
+  await sendQuestionToBot(ctx, s, idx, audio, first);
   await markAsked(s.id, idx);
 }
 
@@ -254,7 +286,7 @@ async function giveUp(job: DomlaJob, ctx: Ctx, err: unknown): Promise<void> {
   if (job.kind === "questions") {
     const r = await failSession(job.sessionId);
     // A web session shows `failed` (and the refund) from the state itself.
-    if (r.failed && ctx.channel === "bot" && ctx.chatId) await ctx.deps.telegram.sendText(ctx.chatId, FAILED_TEXT).catch(() => undefined);
+    if (r.failed && (await channelNow(ctx)) === "bot" && ctx.chatId) await ctx.deps.telegram.sendText(ctx.chatId, FAILED_TEXT).catch(() => undefined);
     return;
   }
   if (job.kind === "score") {
@@ -328,5 +360,7 @@ export async function domlaHousekeeping(deps: DomlaDeps = defaultDeps(), now: Da
     );
     if (r?.chat_id && r.channel === "bot") await deps.telegram.sendText(r.chat_id, FAILED_TEXT).catch(() => undefined);
   }
+  // Audio that outlived its session or its score job (not counted: no session changed).
+  await sweepAudio(now);
   return n;
 }

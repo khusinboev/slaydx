@@ -3,6 +3,7 @@ import { ApiError, readJson } from "./api";
 import { DOMLA_TEXT_MAX_CHARS, DOMLA_VOICE_MAX_BYTES, DOMLA_VOICE_MAX_SECONDS } from "../domla/rules";
 import { RemuxError, sniffAnswerAudio, webmToOgg } from "../domla/webm-ogg";
 import { readUploadForm } from "./upload-body";
+import { minSeconds, mp3Seconds, mp4Seconds, oggSeconds, wavSeconds } from "../domla/audio-length";
 import { submitAnswer, type AnswerInput, type ChannelResult, type SubmitResult } from "./domla";
 import { BUSY_TEXT, NOT_WAITING_TEXT, TOO_BIG_TEXT, TOO_LONG_TEXT } from "../domla/persona";
 
@@ -43,7 +44,12 @@ export async function readWebAnswer(req: Request): Promise<AnswerInput> {
         throw e;
       }
       mime = "audio/ogg";
-    } else mime = MIME[kind];
+    } else {
+      mime = MIME[kind];
+      // Measured from the bytes; a container that does not say is bounded by its size at the highest voice bitrate.
+      const measured = (kind === "ogg" ? oggSeconds : kind === "wav" ? wavSeconds : kind === "mp3" ? mp3Seconds : mp4Seconds)(bytes);
+      seconds = Math.max(seconds, measured ?? minSeconds(bytes.byteLength));
+    }
     if (seconds > DOMLA_VOICE_MAX_SECONDS) throw new ApiError(TOO_LONG_TEXT, 413, { code: "too_long" });
     return { via: "voice", bytes, mime, seconds };
   }

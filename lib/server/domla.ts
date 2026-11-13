@@ -579,6 +579,50 @@ export async function loadAudio(sessionId: string, kind: "question" | "answer", 
   return r ? { mime: r.mime, seconds: Number(r.seconds ?? 0), bytes: new Uint8Array(r.bytes) } : null;
 }
 
+/**
+ * The end of a web `ask`: under the session row lock (the one `setChannel` takes), deletes the job and returns the
+ * channel at that moment. A move to the bot that happened before is seen here; one that happens after finds no job row
+ * in its way and queues its own resend.
+ */
+export async function releaseAsk(jobId: string, sessionId: string): Promise<DomlaChannel> {
+  return transaction(async (client) => {
+    const r = await client.query<{ channel: string }>("SELECT channel FROM domla_sessions WHERE id = $1 FOR UPDATE", [sessionId]);
+    await client.query("DELETE FROM domla_jobs WHERE id = $1", [jobId]);
+    return r.rows[0]?.channel === "bot" ? "bot" : "web";
+  });
+}
+
+/** Re-sends question `idx` to the current channel with its stored voice (a failed hand-over). */
+export async function queueResend(sessionId: string, idx: number): Promise<void> {
+  await query(
+    `INSERT INTO domla_jobs (session_id, kind, idx, payload) VALUES ($1, 'ask', $2, '{"resend":true,"reuse":true}'::jsonb)
+     ON CONFLICT (session_id, kind, idx) DO NOTHING`,
+    [sessionId, idx],
+  );
+}
+
+/** How long a web answer's audio may wait without its score job before the sweep drops it. */
+export const ANSWER_AUDIO_TTL_MIN = 10;
+
+/**
+ * The audio sweep (housekeeping): every stored audio of a session that is no longer open (a close that raced a
+ * write), and answer audio older than `ANSWER_AUDIO_TTL_MIN` whose score job is gone. Returns the rows deleted.
+ */
+export async function sweepAudio(now: Date = new Date()): Promise<number> {
+  const closed = await query<{ session_id: string }>(
+    `DELETE FROM domla_audio a USING domla_sessions s
+      WHERE s.id = a.session_id AND s.status NOT IN ('preparing', 'active') RETURNING a.session_id`,
+  );
+  const stale = await query<{ session_id: string }>(
+    `DELETE FROM domla_audio a
+      WHERE a.kind = 'answer' AND a.created_at < $1::timestamptz - make_interval(mins => $2)
+        AND NOT EXISTS (SELECT 1 FROM domla_jobs j WHERE j.session_id = a.session_id AND j.kind = 'score' AND j.idx = a.idx)
+      RETURNING a.session_id`,
+    [now, ANSWER_AUDIO_TTL_MIN],
+  );
+  return closed.length + stale.length;
+}
+
 /** A web answer's audio is gone the moment it is scored (or given up on). */
 export async function deleteAnswerAudio(sessionId: string, idx: number): Promise<void> {
   await query("DELETE FROM domla_audio WHERE session_id = $1 AND kind = 'answer' AND idx = $2", [sessionId, idx]);
