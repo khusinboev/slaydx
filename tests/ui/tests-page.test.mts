@@ -363,7 +363,10 @@ test("the timer finishes the attempt at the server deadline", async () => {
 });
 
 test("clock skew: the timer follows the server's now, not the device clock", async () => {
-  const view = activeView(10 * 60_000, { serverNow: new Date(Date.now() + 5 * 60_000).toISOString(), deadlineAt: new Date(Date.now() + 15 * 60_000).toISOString() });
+  // One base instant: two `Date.now()` calls a millisecond apart made the deadline 10:00.001 away and the timer (seconds
+  // rounded up) read «10:01» on CI (main 35940f5a).
+  const base = Date.now();
+  const view = activeView(10 * 60_000, { serverNow: new Date(base + 5 * 60_000).toISOString(), deadlineAt: new Date(base + 15 * 60_000).toISOString() });
   stub({
     "GET /api/tests": () => json(200, OV),
     "POST /api/tests/start": () => json(200, { ok: true, attemptId: "A1" }),
