@@ -21,6 +21,11 @@ const appButton = (lang: Lang) => {
   return url ? inlineButton(null, t(lang, "domla.appBtn"), { web_app: { url } }) : null;
 };
 
+const webButton = (lang: Lang) => {
+  const url = appUrl("/uz/domla?davom=web");
+  return url ? inlineButton(null, t(lang, "domla.webBtn"), { web_app: { url } }) : null;
+};
+
 const plain = (lang: Lang, key: TextKey, extra?: Screen["reply_markup"]): Screen => ({
   text: esc(t(lang, key)),
   ...(extra ? { reply_markup: extra } : {}),
@@ -34,7 +39,9 @@ export async function listScreen(ctx: ChatCtx): Promise<Screen> {
   if (open) {
     return {
       text: t(lang, "domla.open", { topic: esc(clip(open.topic || "—", 80)) }),
-      reply_markup: rows([inlineButton(null, t(lang, "domla.resumeBtn"), { callback_data: cb.domlaResume(open.id) }, "primary")], [appButton(lang)]),
+      // «Davom ettirish» continues here (the channel moves to the bot); «Saytda davom etish» opens the web chat, which
+      // moves it to the web (`?davom=web`, see components/domla/DomlaPage.tsx).
+      reply_markup: rows([inlineButton(null, t(lang, "domla.resumeBtn"), { callback_data: cb.domlaResume(open.id) }, "primary")], [webButton(lang)]),
     };
   }
   const works = await listDefendable(user.id, LIST_SIZE);

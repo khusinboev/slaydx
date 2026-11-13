@@ -49,7 +49,7 @@ export type DomlaDeps = {
   score(input: ScoreInput): Promise<ScoreResult>;
   telegram: {
     sendText(chatId: string, text: string, markup?: unknown): Promise<boolean>;
-    sendAudio(chatId: string, audio: SpokenAudio, caption: string): Promise<boolean>;
+    sendAudio(chatId: string, audio: SpokenAudio, caption: string, markup?: unknown): Promise<boolean>;
     sendAction(chatId: string, action: "typing" | "record_voice"): Promise<void>;
     /** getFile + download, at most `DOMLA_VOICE_MAX_BYTES`. Throws `DomlaFileError`. */
     downloadFile(fileId: string): Promise<Uint8Array>;
@@ -158,11 +158,12 @@ async function sendText(chatId: string, text: string, markup?: unknown): Promise
   return sendMessage(chatId, text, markup ? { reply_markup: markup } : {});
 }
 
-async function sendAudio(chatId: string, audio: SpokenAudio, caption: string): Promise<boolean> {
+async function sendAudio(chatId: string, audio: SpokenAudio, caption: string, markup?: unknown): Promise<boolean> {
   const form = new FormData();
   form.set("chat_id", chatId);
   form.set("caption", caption);
   form.set("parse_mode", "HTML");
+  if (markup) form.set("reply_markup", JSON.stringify(markup));
   form.set("title", "Qattiqqo‘l domla");
   form.set("performer", "Domla");
   form.set("duration", String(Math.max(1, Math.round(audio.seconds))));
