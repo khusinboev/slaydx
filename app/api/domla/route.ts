@@ -27,7 +27,7 @@ export const GET = handler("domla/get", async (req) => {
       telegramLinked: Boolean(user.telegramId),
       botUrl: bot ? `https://t.me/${bot}` : null,
       works,
-      open: open ? publicSession(open) : null,
+      open: open ? { ...publicSession(open), channel: open.channel } : null,
       history: history.filter((s) => s.status === "finished" || s.status === "expired").map(publicSession),
     },
     { headers: { "Cache-Control": NO_STORE } },
@@ -36,13 +36,14 @@ export const GET = handler("domla/get", async (req) => {
 
 /**
  * `POST /api/domla` `{ generationId }` -- starts a defence: charges `domla.price` and queues the questions in one
- * transaction (idempotent while the same work's defence is open). The defence itself happens in the bot chat.
+ * transaction (idempotent while the same work's defence is open). A defence started here runs in the web chat
+ * (channel `web`, no Telegram account needed); the student can move it to the bot at any moment.
  */
 export const POST = handler("domla/start", async (req) => {
   const { user } = await requireUser(req);
   await limit(`domla-start:${user.id}`, 10, 60);
   const body = await readJson<{ generationId?: unknown }>(req, 2_000);
   if (typeof body.generationId !== "string" || !body.generationId) throw new ApiError("Ish tanlanmadi", 400, { code: "bad_request" });
-  const r = await startDefence(user.id, body.generationId);
-  return json({ ok: true, sessionId: r.session.id, alreadyOpen: r.alreadyOpen, price: r.price, status: r.session.status });
+  const r = await startDefence(user.id, body.generationId, "web");
+  return json({ ok: true, sessionId: r.session.id, alreadyOpen: r.alreadyOpen, price: r.price, status: r.session.status, channel: r.session.channel });
 });

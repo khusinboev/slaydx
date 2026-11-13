@@ -62,6 +62,7 @@ const T = {
   },
   "domla.resumeBtn": { uz: "Davom ettirish", ru: "Продолжить", en: "Continue" },
   "domla.appBtn": { uz: "Tarix va ilova", ru: "История и приложение", en: "History and app" },
+  "domla.webBtn": { uz: "🌐 Saytda davom etish", ru: "🌐 Продолжить на сайте", en: "🌐 Continue on the website" },
   "domla.topUpBtn": { uz: "Hisobni to‘ldirish", ru: "Пополнить счёт", en: "Top up" },
   "domla.started": {
     uz: "🎓 Domla savollarni tayyorlayapti… Birozdan keyin birinchi savol ovozli xabar bo‘lib keladi. To‘landi: {price}.",

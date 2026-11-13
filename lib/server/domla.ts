@@ -48,7 +48,14 @@ export type DomlaSession = {
   lastActivityAt: string;
   createdAt: string;
   finishedAt: string | null;
+  /** Where the questions and notices go (migration 079): `bot` (Telegram chat) or `web` (the /uz/domla chat). */
+  channel: DomlaChannel;
+  /** The last web notice not visible from the state (a voice that could not be heard), cleared by the next answer. */
+  notice: string | null;
 };
+
+export type DomlaChannel = "bot" | "web";
+export const isDomlaChannel = (v: unknown): v is DomlaChannel => v === "bot" || v === "web";
 
 type Row = {
   id: string;
@@ -64,10 +71,12 @@ type Row = {
   last_activity_at: Date | string;
   created_at: Date | string;
   finished_at: Date | string | null;
+  channel?: string | null;
+  notice?: string | null;
 };
 
 const COLS = `id, user_id::text AS user_id, status, topic, source_generation_id, questions, answers, asked, grade,
-  charged_points::text AS charged_points, last_activity_at, created_at, finished_at`;
+  charged_points::text AS charged_points, last_activity_at, created_at, finished_at, channel, notice`;
 
 const iso = (v: Date | string | null): string | null => (v === null ? null : new Date(v).toISOString());
 
@@ -86,6 +95,8 @@ export function rowToSession(r: Row): DomlaSession {
     lastActivityAt: iso(r.last_activity_at)!,
     createdAt: iso(r.created_at)!,
     finishedAt: iso(r.finished_at),
+    channel: r.channel === "web" ? "web" : "bot",
+    notice: r.notice ?? null,
   };
 }
 
@@ -163,17 +174,30 @@ export async function listDefendable(userId: string, limit = 20): Promise<Defend
 const OPEN = ["preparing", "active"] as const;
 
 /** Expires `active` sessions idle for `DOMLA_IDLE_MINUTES`; returns them (the caller tells the user). */
-export async function expireIdle(now: Date = new Date()): Promise<{ id: string; userId: string; telegramId: string | null }[]> {
-  const rows = await query<{ id: string; user_id: string; telegram_id: string | null }>(
+export async function expireIdle(now: Date = new Date()): Promise<{ id: string; userId: string; telegramId: string | null; channel: DomlaChannel }[]> {
+  const rows = await query<{ id: string; user_id: string; telegram_id: string | null; channel: string }>(
     `UPDATE domla_sessions s
         SET status = 'expired', finished_at = $1
        FROM users u
       WHERE u.id = s.user_id AND s.status = 'active' AND s.last_activity_at < $1::timestamptz - make_interval(mins => $2)
-      RETURNING s.id, s.user_id::text AS user_id, u.telegram_id::text AS telegram_id`,
+      RETURNING s.id, s.user_id::text AS user_id, u.telegram_id::text AS telegram_id, s.channel`,
     [now, DOMLA_IDLE_MINUTES],
   );
-  if (rows.length) await query("DELETE FROM domla_jobs WHERE session_id = ANY($1::uuid[])", [rows.map((r) => r.id)]);
-  return rows.map((r) => ({ id: r.id, userId: r.user_id, telegramId: r.telegram_id }));
+  if (rows.length) {
+    const ids = rows.map((r) => r.id);
+    await query("DELETE FROM domla_jobs WHERE session_id = ANY($1::uuid[])", [ids]);
+    await query("DELETE FROM domla_audio WHERE session_id = ANY($1::uuid[])", [ids]);
+  }
+  return rows.map((r) => ({ id: r.id, userId: r.user_id, telegramId: r.telegram_id, channel: r.channel === "web" ? "web" : "bot" }));
+}
+
+type Sql = { query: (sql: string, params: unknown[]) => Promise<unknown> };
+
+/** Drops every stored audio of a closed session (question voices and any answer still waiting): nothing outlives it. */
+async function dropAudio(client: Sql | null, sessionId: string): Promise<void> {
+  const sql = "DELETE FROM domla_audio WHERE session_id = $1";
+  if (client) await client.query(sql, [sessionId]);
+  else await query(sql, [sessionId]);
 }
 
 /**
@@ -190,6 +214,7 @@ export async function failSession(sessionId: string, note = "Domla: savollar tuz
     const row = r.rows[0];
     if (!row) return { failed: false, userId: null };
     await client.query("DELETE FROM domla_jobs WHERE session_id = $1", [sessionId]);
+    await dropAudio(client, sessionId);
     await refundInTx(client, row.user_id, chargeRef(sessionId), note);
     return { failed: true, userId: row.user_id };
   });
@@ -214,6 +239,7 @@ export async function openSession(userId: string, now: Date = new Date()): Promi
   if (s.status === "active" && now.getTime() - new Date(s.lastActivityAt).getTime() >= DOMLA_IDLE_MINUTES * 60_000) {
     await query("UPDATE domla_sessions SET status = 'expired', finished_at = now() WHERE id = $1 AND status = 'active'", [s.id]);
     await query("DELETE FROM domla_jobs WHERE session_id = $1", [s.id]);
+    await dropAudio(null, s.id);
     return null;
   }
   return s;
@@ -245,7 +271,7 @@ function isOpenSessionViolation(e: unknown): boolean {
  * for the same work is open, the same session comes back and nothing more is charged (a double tap, a second
  * tab, a redelivered update); a session for ANOTHER work is a 409 `open_session`.
  */
-export async function startDefence(userId: string, generationId: string): Promise<StartResult> {
+export async function startDefence(userId: string, generationId: string, channel: DomlaChannel = "bot"): Promise<StartResult> {
   if (!(await domlaEnabled())) throw new ApiError("Qattiqqo‘l domla hozircha o‘chiq", 503, { code: "disabled" });
   const price = await domlaPrice();
   const attempt = () =>
@@ -257,9 +283,12 @@ export async function startDefence(userId: string, generationId: string): Promis
         [generationId, userId, [...DOMLA_SOURCE_TOOLS]],
       );
       if (!gen.rows[0]) throw new ApiError("Bu ish topilmadi yoki himoya uchun yaroqsiz", 404, { code: "not_found" });
-      // The defence is spoken in the user's Telegram chat: a web-only account has nowhere to hear the questions.
-      const tg = await client.query<{ telegram_id: string | null }>("SELECT telegram_id::text AS telegram_id FROM users WHERE id = $1", [userId]);
-      if (!tg.rows[0]?.telegram_id) throw new ApiError("Himoya Telegram botda o‘tadi — avval Telegram akkauntini bog‘lang", 409, { code: "no_telegram" });
+      // A bot defence is spoken in the user's Telegram chat: a web-only account has nowhere to hear it there. A web
+      // defence (migration 079) needs no Telegram at all.
+      if (channel === "bot") {
+        const tg = await client.query<{ telegram_id: string | null }>("SELECT telegram_id::text AS telegram_id FROM users WHERE id = $1", [userId]);
+        if (!tg.rows[0]?.telegram_id) throw new ApiError("Himoya Telegram botda o‘tadi — avval Telegram akkauntini bog‘lang", 409, { code: "no_telegram" });
+      }
 
       const open = await client.query<Row>(
         `SELECT ${COLS} FROM domla_sessions WHERE user_id = $1 AND status = ANY($2::text[]) FOR UPDATE`,
@@ -275,13 +304,14 @@ export async function startDefence(userId: string, generationId: string): Promis
         }
         await client.query("UPDATE domla_sessions SET status = 'expired', finished_at = now() WHERE id = $1", [s.id]);
         await client.query("DELETE FROM domla_jobs WHERE session_id = $1", [s.id]);
+        await dropAudio(client, s.id);
       }
 
       const id = randomUUID();
       const ins = await client.query<Row>(
-        `INSERT INTO domla_sessions (id, user_id, source_generation_id, topic, charged_points)
-         VALUES ($1, $2, $3, $4, $5) RETURNING ${COLS}`,
-        [id, userId, generationId, gen.rows[0].topic.slice(0, 300), price],
+        `INSERT INTO domla_sessions (id, user_id, source_generation_id, topic, charged_points, channel)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${COLS}`,
+        [id, userId, generationId, gen.rows[0].topic.slice(0, 300), price, channel],
       );
       const charged = await chargeInTx(client, userId, price, chargeRef(id), "Qattiqqo‘l domla");
       if (!charged.ok) {
@@ -307,8 +337,13 @@ export async function startDefence(userId: string, generationId: string): Promis
 /* ───────────────────────── answers ───────────────────────── */
 
 export type AnswerInput =
+  /** A Telegram voice message: only its `file_id` is queued, the worker downloads it. */
   | { via: "voice"; fileId: string; mime: string; size: number; seconds: number }
+  /** A web voice answer (migration 079): the bytes wait in `domla_audio` until the worker has scored them, then go. */
+  | { via: "voice"; bytes: Uint8Array; mime: string; seconds: number }
   | { via: "text"; text: string };
+
+const isUpload = (i: AnswerInput): i is Extract<AnswerInput, { bytes: Uint8Array }> => i.via === "voice" && "bytes" in i;
 
 export type SubmitResult =
   | { ok: true; sessionId: string; idx: number }
@@ -316,11 +351,23 @@ export type SubmitResult =
 
 /**
  * A student's answer to the question that is waiting: validates it and enqueues the `score` job. NOTHING heavy
- * happens here (the Telegram webhook calls this and must answer fast); for a voice answer only the Telegram
- * `file_id` is stored, never audio.
+ * happens here (the Telegram webhook calls this and must answer fast); for a bot voice answer only the Telegram
+ * `file_id` is stored, a web voice answer's bytes wait in `domla_audio` until scored.
+ * `opts.from` = the channel the answer came from (the session moves there); `opts.sessionId` = the session the web
+ * chat answers (a different open session is `no_session`, never answered by mistake).
  */
-export async function submitAnswer(userId: string, input: AnswerInput, now: Date = new Date()): Promise<SubmitResult> {
-  if (input.via === "voice") {
+export async function submitAnswer(
+  userId: string,
+  input: AnswerInput,
+  now: Date = new Date(),
+  opts: { from?: DomlaChannel; sessionId?: string } = {},
+): Promise<SubmitResult> {
+  const from: DomlaChannel = opts.from ?? "bot";
+  if (isUpload(input)) {
+    if (input.bytes.byteLength === 0) return { ok: false, reason: "empty" };
+    if (input.bytes.byteLength > DOMLA_VOICE_MAX_BYTES) return { ok: false, reason: "too_big" };
+    if (!(input.seconds >= 0) || input.seconds > DOMLA_VOICE_MAX_SECONDS) return { ok: false, reason: "too_long" };
+  } else if (input.via === "voice") {
     if (!(input.size > 0) || input.size > DOMLA_VOICE_MAX_BYTES) return { ok: false, reason: "too_big" };
     if (input.seconds > DOMLA_VOICE_MAX_SECONDS) return { ok: false, reason: "too_long" };
     if (!input.fileId || input.fileId.length > 300) return { ok: false, reason: "empty" };
@@ -329,18 +376,20 @@ export async function submitAnswer(userId: string, input: AnswerInput, now: Date
   return transaction(async (client): Promise<SubmitResult> => {
     const r = await client.query<Row>(`SELECT ${COLS} FROM domla_sessions WHERE user_id = $1 AND status = ANY($2::text[]) FOR UPDATE`, [userId, [...OPEN]]);
     const row = r.rows[0];
-    if (!row) return { ok: false, reason: "no_session" };
+    if (!row || (opts.sessionId !== undefined && row.id !== opts.sessionId)) return { ok: false, reason: "no_session" };
     const s = rowToSession(row);
     if (s.status === "preparing") return { ok: false, reason: "preparing" };
     if (now.getTime() - new Date(s.lastActivityAt).getTime() >= DOMLA_IDLE_MINUTES * 60_000) {
       await client.query("UPDATE domla_sessions SET status = 'expired', finished_at = $2 WHERE id = $1", [s.id, now]);
       await client.query("DELETE FROM domla_jobs WHERE session_id = $1", [s.id]);
+      await dropAudio(client, s.id);
       return { ok: false, reason: "expired" };
     }
     const idx = s.answers.length;
     if (idx >= DOMLA_QUESTIONS || idx >= s.questions.length || s.asked <= idx) return { ok: false, reason: "not_waiting" };
-    const payload =
-      input.via === "voice"
+    const payload = isUpload(input)
+      ? { via: "voice", stored: true, mime: input.mime, seconds: Math.round(input.seconds) }
+      : input.via === "voice"
         ? { via: "voice", fileId: input.fileId, mime: input.mime, seconds: Math.round(input.seconds) }
         : { via: "text", text: input.text.trim().slice(0, DOMLA_TEXT_MAX_CHARS) };
     const job = await client.query(
@@ -349,7 +398,16 @@ export async function submitAnswer(userId: string, input: AnswerInput, now: Date
       [s.id, idx, toJsonb(payload)],
     );
     if (job.rows.length === 0) return { ok: false, reason: "busy" };
-    await client.query("UPDATE domla_sessions SET last_activity_at = $2 WHERE id = $1", [s.id, now]);
+    // The bytes of a web voice answer wait in `domla_audio` (same transaction as the job: never one without the other).
+    if (isUpload(input)) {
+      await client.query(
+        `INSERT INTO domla_audio (session_id, kind, idx, mime, seconds, bytes) VALUES ($1, 'answer', $2, $3, $4, $5)
+         ON CONFLICT (session_id, kind, idx) DO UPDATE SET mime = EXCLUDED.mime, seconds = EXCLUDED.seconds, bytes = EXCLUDED.bytes, created_at = now()`,
+        [s.id, idx, input.mime, input.seconds, Buffer.from(input.bytes)],
+      );
+    }
+    // An answer from the other channel moves the defence there: the reaction and the next question follow the student.
+    await client.query("UPDATE domla_sessions SET last_activity_at = $2, channel = $3, notice = NULL, notice_at = NULL WHERE id = $1", [s.id, now, from]);
     return { ok: true, sessionId: s.id, idx };
   });
 }
@@ -383,6 +441,7 @@ export async function resumeSession(userId: string, sessionId: string, now: Date
     if (s.status === "preparing") return { ok: false, reason: "preparing" };
     if (now.getTime() - new Date(s.lastActivityAt).getTime() >= DOMLA_IDLE_MINUTES * 60_000) {
       await client.query("UPDATE domla_sessions SET status = 'expired', finished_at = $2 WHERE id = $1", [s.id, now]);
+      await dropAudio(client, s.id);
       return { ok: false, reason: "expired" };
     }
     const idx = s.answers.length;
@@ -391,9 +450,187 @@ export async function resumeSession(userId: string, sessionId: string, now: Date
        ON CONFLICT (session_id, kind, idx) DO NOTHING`,
       [s.id, idx],
     );
-    await client.query("UPDATE domla_sessions SET last_activity_at = $2 WHERE id = $1", [s.id, now]);
-    return { ok: true, session: s };
+    // «Davom ettirish» is a bot button: the defence continues in the bot.
+    await client.query("UPDATE domla_sessions SET last_activity_at = $2, channel = 'bot' WHERE id = $1", [s.id, now]);
+    return { ok: true, session: { ...s, channel: "bot" } };
   });
+}
+
+export type ChannelResult =
+  | { ok: true; channel: DomlaChannel; resent: boolean }
+  | { ok: false; reason: "not_found" | "expired" | "finished" | "no_telegram" };
+
+/**
+ * «Botda davom etish» / «Saytda davom etish»: moves an open defence to `channel` (owner-checked in SQL). Moving to the
+ * bot re-sends the question that waits for an answer (an `ask` job with `resend` + `reuse`: the stored voice is sent
+ * again, nothing is synthesized twice); moving to the web needs nothing sent -- the page reads the state. A user
+ * without Telegram cannot move to the bot (`no_telegram`). Refreshes the 30-minute window like an answer does.
+ */
+export async function setChannel(userId: string, sessionId: string, channel: DomlaChannel, now: Date = new Date()): Promise<ChannelResult> {
+  if (!(await domlaEnabled())) throw new ApiError("Qattiqqo‘l domla hozircha o‘chiq", 503, { code: "disabled" });
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId)) return { ok: false, reason: "not_found" };
+  return transaction(async (client): Promise<ChannelResult> => {
+    const r = await client.query<Row>(`SELECT ${COLS} FROM domla_sessions WHERE id = $1 AND user_id = $2 FOR UPDATE`, [sessionId, userId]);
+    const row = r.rows[0];
+    if (!row) return { ok: false, reason: "not_found" };
+    const tg = await client.query<{ telegram_id: string | null }>("SELECT telegram_id::text AS telegram_id FROM users WHERE id = $1", [userId]);
+    const s = rowToSession(row);
+    if (s.status === "expired") return { ok: false, reason: "expired" };
+    if (s.status !== "preparing" && s.status !== "active") return { ok: false, reason: "finished" };
+    if (s.status === "active" && now.getTime() - new Date(s.lastActivityAt).getTime() >= DOMLA_IDLE_MINUTES * 60_000) {
+      await client.query("UPDATE domla_sessions SET status = 'expired', finished_at = $2 WHERE id = $1", [s.id, now]);
+      await client.query("DELETE FROM domla_jobs WHERE session_id = $1", [s.id]);
+      await dropAudio(client, s.id);
+      return { ok: false, reason: "expired" };
+    }
+    if (channel === "bot" && !tg.rows[0]?.telegram_id) return { ok: false, reason: "no_telegram" };
+    let resent = false;
+    const idx = s.answers.length;
+    if (channel === "bot" && s.channel !== "bot" && s.status === "active" && s.asked > idx && idx < s.questions.length) {
+      // The question is out and unanswered (no score job queued for it): the bot gets it again.
+      const scoring = await client.query("SELECT 1 FROM domla_jobs WHERE session_id = $1 AND kind = 'score' AND idx = $2", [s.id, idx]);
+      if (scoring.rows.length === 0) {
+        const ins = await client.query(
+          `INSERT INTO domla_jobs (session_id, kind, idx, payload) VALUES ($1, 'ask', $2, '{"resend":true,"reuse":true}'::jsonb)
+           ON CONFLICT (session_id, kind, idx) DO NOTHING RETURNING id`,
+          [s.id, idx],
+        );
+        resent = ins.rows.length > 0;
+      }
+    }
+    await client.query("UPDATE domla_sessions SET channel = $2, last_activity_at = CASE WHEN status = 'active' THEN $3 ELSE last_activity_at END WHERE id = $1", [s.id, channel, now]);
+    return { ok: true, channel, resent };
+  });
+}
+
+/* ───────────────────────── the web chat ───────────────────────── */
+
+/**
+ * What the web chat shows of a defence: the questions ALREADY ASKED (text, and whether a voice can be played), the
+ * scored answers (transcript, score, verdict), the question waiting for an answer, whether an answer is being scored,
+ * the active channel and the last notice. The ideal answer of a question NEVER appears here -- only the finished
+ * defence's `weakest` (from `publicSession`) carries one, as on the page before.
+ */
+export type ChatState = PublicSession & {
+  channel: DomlaChannel;
+  asked: { idx: number; text: string; audio: boolean }[];
+  answers: { idx: number; via: "voice" | "text"; transcript: string; score: number; verdict: string }[];
+  waiting: number | null;
+  scoring: boolean;
+  notice: string | null;
+  expiresAt: string | null;
+};
+
+export async function chatState(userId: string, sessionId: string, now: Date = new Date()): Promise<ChatState | null> {
+  let s = await getSession(userId, sessionId);
+  if (!s) return null;
+  if (s.status === "active" && now.getTime() - new Date(s.lastActivityAt).getTime() >= DOMLA_IDLE_MINUTES * 60_000) {
+    await openSession(userId, now); // the lazy expiry (and the audio clean-up) of the open session
+    s = (await getSession(userId, sessionId))!;
+  }
+  const [audio, jobs] = await Promise.all([
+    query<{ idx: number }>("SELECT idx FROM domla_audio WHERE session_id = $1 AND kind = 'question'", [s.id]),
+    query<{ idx: number }>("SELECT idx FROM domla_jobs WHERE session_id = $1 AND kind = 'score'", [s.id]),
+  ]);
+  const voiced = new Set(audio.map((a) => a.idx));
+  const open = s.status === "active";
+  const idx = s.answers.length;
+  const scoring = open && jobs.some((j) => j.idx === idx);
+  const asked = s.questions.slice(0, Math.min(s.asked, s.questions.length)).map((q, i) => ({ idx: i, text: q.text, audio: voiced.has(i) }));
+  return {
+    ...publicSession(s),
+    channel: s.channel,
+    asked,
+    answers: s.answers.map((a) => ({ idx: a.idx, via: a.via, transcript: a.transcript, score: a.score, verdict: a.verdict })),
+    waiting: open && !scoring && s.asked > idx && idx < s.questions.length ? idx : null,
+    scoring,
+    notice: open ? s.notice : null,
+    expiresAt: open ? new Date(new Date(s.lastActivityAt).getTime() + DOMLA_IDLE_MINUTES * 60_000).toISOString() : null,
+  };
+}
+
+/** The examiner's voice for question `idx` of the user's own defence, only once it has been asked. */
+export async function questionAudio(userId: string, sessionId: string, idx: number): Promise<{ mime: string; bytes: Buffer } | null> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId) || !Number.isInteger(idx) || idx < 0 || idx >= DOMLA_QUESTIONS) return null;
+  return queryOne<{ mime: string; bytes: Buffer }>(
+    `SELECT a.mime, a.bytes FROM domla_audio a JOIN domla_sessions s ON s.id = a.session_id
+      WHERE a.session_id = $1 AND s.user_id = $2 AND a.kind = 'question' AND a.idx = $3 AND s.asked > $3`,
+    [sessionId, userId, idx],
+  );
+}
+
+/* ───────────────────────── worker side: audio ───────────────────────── */
+
+/** Keeps the voice of question `idx` (the first one made wins: a resend never overwrites it). */
+export async function storeQuestionAudio(sessionId: string, idx: number, audio: { bytes: Uint8Array; seconds: number }): Promise<void> {
+  await query(
+    `INSERT INTO domla_audio (session_id, kind, idx, mime, seconds, bytes)
+     SELECT $1, 'question', $2, 'audio/mpeg', $3, $4 WHERE EXISTS (SELECT 1 FROM domla_sessions WHERE id = $1 AND status = 'active')
+     ON CONFLICT (session_id, kind, idx) DO NOTHING`,
+    [sessionId, idx, Number.isFinite(audio.seconds) ? audio.seconds : null, Buffer.from(audio.bytes)],
+  );
+}
+
+export async function loadAudio(sessionId: string, kind: "question" | "answer", idx: number): Promise<{ mime: string; seconds: number; bytes: Uint8Array } | null> {
+  const r = await queryOne<{ mime: string; seconds: number | null; bytes: Buffer }>(
+    "SELECT mime, seconds, bytes FROM domla_audio WHERE session_id = $1 AND kind = $2 AND idx = $3",
+    [sessionId, kind, idx],
+  );
+  return r ? { mime: r.mime, seconds: Number(r.seconds ?? 0), bytes: new Uint8Array(r.bytes) } : null;
+}
+
+/**
+ * The end of a web `ask`: under the session row lock (the one `setChannel` takes), deletes the job and returns the
+ * channel at that moment. A move to the bot that happened before is seen here; one that happens after finds no job row
+ * in its way and queues its own resend.
+ */
+export async function releaseAsk(jobId: string, sessionId: string): Promise<DomlaChannel> {
+  return transaction(async (client) => {
+    const r = await client.query<{ channel: string }>("SELECT channel FROM domla_sessions WHERE id = $1 FOR UPDATE", [sessionId]);
+    await client.query("DELETE FROM domla_jobs WHERE id = $1", [jobId]);
+    return r.rows[0]?.channel === "bot" ? "bot" : "web";
+  });
+}
+
+/** Re-sends question `idx` to the current channel with its stored voice (a failed hand-over). */
+export async function queueResend(sessionId: string, idx: number): Promise<void> {
+  await query(
+    `INSERT INTO domla_jobs (session_id, kind, idx, payload) VALUES ($1, 'ask', $2, '{"resend":true,"reuse":true}'::jsonb)
+     ON CONFLICT (session_id, kind, idx) DO NOTHING`,
+    [sessionId, idx],
+  );
+}
+
+/** How long a web answer's audio may wait without its score job before the sweep drops it. */
+export const ANSWER_AUDIO_TTL_MIN = 10;
+
+/**
+ * The audio sweep (housekeeping): every stored audio of a session that is no longer open (a close that raced a
+ * write), and answer audio older than `ANSWER_AUDIO_TTL_MIN` whose score job is gone. Returns the rows deleted.
+ */
+export async function sweepAudio(now: Date = new Date()): Promise<number> {
+  const closed = await query<{ session_id: string }>(
+    `DELETE FROM domla_audio a USING domla_sessions s
+      WHERE s.id = a.session_id AND s.status NOT IN ('preparing', 'active') RETURNING a.session_id`,
+  );
+  const stale = await query<{ session_id: string }>(
+    `DELETE FROM domla_audio a
+      WHERE a.kind = 'answer' AND a.created_at < $1::timestamptz - make_interval(mins => $2)
+        AND NOT EXISTS (SELECT 1 FROM domla_jobs j WHERE j.session_id = a.session_id AND j.kind = 'score' AND j.idx = a.idx)
+      RETURNING a.session_id`,
+    [now, ANSWER_AUDIO_TTL_MIN],
+  );
+  return closed.length + stale.length;
+}
+
+/** A web answer's audio is gone the moment it is scored (or given up on). */
+export async function deleteAnswerAudio(sessionId: string, idx: number): Promise<void> {
+  await query("DELETE FROM domla_audio WHERE session_id = $1 AND kind = 'answer' AND idx = $2", [sessionId, idx]);
+}
+
+/** A web notice («Domla javobingizni eshita olmadi…»): shown in the chat until the next accepted answer. */
+export async function setNotice(sessionId: string, text: string): Promise<void> {
+  await query("UPDATE domla_sessions SET notice = $2, notice_at = now() WHERE id = $1", [sessionId, text.slice(0, 500)]);
 }
 
 /* ───────────────────────── worker side: state changes ───────────────────────── */
@@ -445,6 +682,7 @@ export async function finishSession(sessionId: string): Promise<DomlaSession | n
       `UPDATE domla_sessions SET status = 'finished', grade = $2, finished_at = now() WHERE id = $1 RETURNING ${COLS}`,
       [sessionId, grade],
     );
+    await dropAudio(client, sessionId);
     return rowToSession(u.rows[0]!);
   });
 }

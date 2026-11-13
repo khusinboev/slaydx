@@ -5,7 +5,10 @@
  * here, once.
  */
 import { esc } from "../server/bot/ui";
-import { DOMLA_MAX_SCORE, gradeOf, type DomlaAnswer, type DomlaQuestion, type Grade } from "./rules";
+import { DOMLA_MAX_SCORE, gradeOf, type DomlaAnswer, type DomlaQuestion } from "./rules";
+import { HEADLINE, headline, reactionLine } from "./lines";
+
+export { headline, reactionLine };
 
 const ORDINAL = ["Birinchi", "Ikkinchi", "Uchinchi", "To'rtinchi", "Beshinchi"] as const;
 const ordinal = (i: number): string => ORDINAL[i] ?? `${i + 1}-`;
@@ -25,16 +28,6 @@ export function questionCaption(idx: number, total: number, q: DomlaQuestion): s
   return `🎓 <b>Savol ${idx + 1}/${total}</b>\n\n${esc(q.text)}\n\n<i>🎙 Ovozli xabar bilan javob bering (yoki matn yozing).</i>`;
 }
 
-/** The short reaction to an answer, by score. */
-export function reactionLine(score: number): string {
-  if (score >= 5) return "Barakalla. To'liq javob.";
-  if (score === 4) return "Yaxshi. Deyarli to'liq.";
-  if (score === 3) return "Hm… qisman to'g'ri.";
-  if (score === 2) return "Zaif. Yana bir oz o'ylash kerak edi.";
-  if (score === 1) return "Savolga deyarli to'g'ri kelmadi.";
-  return "Bu javob emas. Keyingi savolga o'tamiz.";
-}
-
 const clipText = (s: string, n: number): string => (Array.from(s).length <= n ? s : `${Array.from(s).slice(0, n - 1).join("").trimEnd()}…`);
 
 /** The message after an answer: what was heard, the score, one line of verdict. */
@@ -43,16 +36,6 @@ export function reactionMessage(a: DomlaAnswer): string {
   const verdict = a.verdict ? `\n${esc(a.verdict)}` : "";
   return `${heard}<b>${a.score}/${DOMLA_MAX_SCORE}</b> — ${esc(reactionLine(a.score))}${verdict}`;
 }
-
-/** «Domla senga 4 qo'ydi.» and the joke that goes with the grade. */
-const HEADLINE: Record<Grade, string> = {
-  5: "Domla senga 5 qo'ydi. Hatto o'zi ham hayron bo'ldi.",
-  4: "Domla senga 4 qo'ydi. Yaxshi, lekin 5 ga bir qadam qoldi.",
-  3: "Domla senga 3 qo'ydi. O'tding, lekin domla qoshini chimirib qoldi.",
-  2: "Domla senga 2 qo'ydi. Xafa bo'lma — jurnalga yozilmaydi, qayta tayyorlanib kel.",
-};
-
-export const headline = (g: Grade): string => HEADLINE[g];
 
 /** The final message. Idempotent text: same inputs, same output. */
 export function finalMessage(questions: readonly DomlaQuestion[], answers: readonly DomlaAnswer[]): string {

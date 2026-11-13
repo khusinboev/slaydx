@@ -368,6 +368,17 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     );
     await runSql("DELETE FROM generations WHERE id = '00000000-0000-4000-8000-000000000078'");
     assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM generation_ratings"))!.n, "0", "078 the rating goes with its generation");
+    // 079: «Qattiqqo'l domla» on the web -- domla_sessions.channel (bot|web, default bot) + notice, domla_audio.
+    assert.ok(await exists("domla_audio"), "079 table created");
+    await runSql(`INSERT INTO users (telegram_id, username, name) VALUES (777000079, 'mig079', 'M');
+      INSERT INTO domla_sessions (id, user_id) SELECT '00000000-0000-4000-8000-000000000079', id FROM users WHERE telegram_id = 777000079;`);
+    assert.equal((await queryOne<{ c: string }>("SELECT channel AS c FROM domla_sessions WHERE id = '00000000-0000-4000-8000-000000000079'"))!.c, "bot", "079 an old-style row is a bot defence");
+    await assert.rejects(runSql("UPDATE domla_sessions SET channel = 'sms' WHERE id = '00000000-0000-4000-8000-000000000079'"), /domla_sessions_channel_check/, "079 channel bot|web");
+    await runSql("INSERT INTO domla_audio (session_id, kind, idx, mime, bytes) VALUES ('00000000-0000-4000-8000-000000000079', 'question', 0, 'audio/mpeg', '\\x00')");
+    await assert.rejects(runSql("INSERT INTO domla_audio (session_id, kind, idx, mime, bytes) VALUES ('00000000-0000-4000-8000-000000000079', 'note', 0, 'x', '\\x00')"), /check/i, "079 kind question|answer");
+    await runSql("DELETE FROM users WHERE telegram_id = 777000079");
+    assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM domla_audio"))!.n, "0", "079 audio goes with its session");
+    await runSql(sqlOf("079_domla_web.sql"));
     await assert.rejects(runSql("INSERT INTO studio_prompts (category, title, prompt) VALUES ('logo', 'x', repeat('a', 501))"), /check/i, "067 prompt length CHECK");
     await assert.rejects(runSql("INSERT INTO studio_templates (category, title, model_id, skeleton, params) VALUES ('logo', 'x', 'a/b', 'abc', '[]')"), /check/i, "067 params must be an object");
     // 068: Studio P5 voices (docs/studio/P5-SPEC.md) -- samples, clones (one active per user), previews.
@@ -462,6 +473,8 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     `);
     await runSql("INSERT INTO studio_prompts (media, category, title, prompt) VALUES ('video', 'tabiat', 'Admin klipi', 'One shot of a river')");
     for (const f of [
+      // 079: «Qattiqqo'l domla» on the web -- domla_audio, domla_sessions.channel / notice / notice_at.
+      "079_domla_web.sql",
       // 078: work ratings (docs/ratings/GENERATION-RATING.md) -- generation_ratings.
       "078_generation_ratings.sql",
       // 077: Studio package G (docs/studio/P11-SPEC.md) -- studio_prompt_rewrites.
@@ -568,6 +581,11 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
         assert.ok(!(await exists("generations_compare_group_idx")), "071 rollback drops the index");
         const cols = await query<{ c: string }>("SELECT column_name AS c FROM information_schema.columns WHERE table_name = 'generations' AND column_name LIKE 'compare_%'");
         assert.equal(cols.length, 0, "071 rollback drops both columns");
+      }
+      if (f === "079_domla_web.sql") {
+        assert.ok(!(await exists("domla_audio")), "079 rollback drops the table");
+        const cols = await query<{ c: string }>("SELECT column_name AS c FROM information_schema.columns WHERE table_name = 'domla_sessions' AND column_name IN ('channel', 'notice', 'notice_at')");
+        assert.equal(cols.length, 0, "079 rollback drops the three columns");
       }
       if (f === "078_generation_ratings.sql") {
         assert.ok(!(await exists("generation_ratings")), "078 rollback drops the table");
